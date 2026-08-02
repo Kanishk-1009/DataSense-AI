@@ -1,13 +1,78 @@
-venv/
+# ==========================
+# Python
+# ==========================
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.so
 
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Environment Variables
 .env
+.env.*
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Python Tool Caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+
+# Logs
+*.log
+
+# ==========================
+# Node / React
+# ==========================
+node_modules/
+dist/
+build/
+coverage/
+
+# Vite
+.vite/
+
+# npm / yarn / pnpm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================
+# VS Code
+# ==========================
 .vscode/
 
-.pytest_cache/
+# JetBrains
+.idea/
 
-results/raw/
-
-*.log
+# ==========================
+# Operating System
+# ==========================
 .DS_Store
+Thumbs.db
+
+# ==========================
+# Project Outputs
+# ==========================
+results/
+reports/
+exports/
+generated_reports/
+
+# Uploads (optional)
+uploads/
+
+# Temporary Files
+*.tmp
+*.bak
