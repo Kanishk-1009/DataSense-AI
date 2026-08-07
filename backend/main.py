@@ -1,8 +1,9 @@
 from io import BytesIO
 
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
+from backend.core.eda import run_eda
 from backend.core.profiler import profile_dataset
 from backend.core.validator import validate_csv
 
@@ -13,23 +14,7 @@ app = FastAPI(
 )
 
 
-@app.get("/")
-def root():
-    return {
-        "message": "Smart Dataset Understanding Agent API",
-        "status": "running"
-    }
-
-
-@app.get("/health")
-def health():
-    return {
-        "status": "healthy"
-    }
-
-
-@app.post("/upload")
-async def upload_dataset(file: UploadFile = File(...)):
+async def _read_uploaded_csv(file: UploadFile) -> pd.DataFrame:
 
     validate_csv(file)
 
@@ -59,4 +44,34 @@ async def upload_dataset(file: UploadFile = File(...)):
             detail="Dataset contains no rows."
         )
 
+    return df
+
+
+@app.get("/")
+def root():
+    return {
+        "message": "Smart Dataset Understanding Agent API",
+        "status": "running"
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy"
+    }
+
+
+@app.post("/upload")
+async def upload_dataset(file: UploadFile = File(...)):
+    df = await _read_uploaded_csv(file)
     return profile_dataset(df)
+
+
+@app.post("/eda")
+async def eda_dataset(
+    file: UploadFile = File(...),
+    target: str = Form(None)
+):
+    df = await _read_uploaded_csv(file)
+    return run_eda(df, target=target)
