@@ -4,17 +4,32 @@ from backend.core.eda.numeric_statistics import compute_numeric_statistics
 from backend.core.eda.correlation import compute_correlation_analysis
 from backend.core.eda.outliers import detect_outliers
 from backend.core.eda.target_analysis import analyze_target_variable
+from backend.core.eda.quality_score import compute_data_quality_score
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
+    numeric_statistics = compute_numeric_statistics(df)
+    correlation_analysis = compute_correlation_analysis(df)
+    outliers = detect_outliers(df)
+
     eda_result = {
-        "numeric_statistics": compute_numeric_statistics(df),
-        "correlation_analysis": compute_correlation_analysis(df),
-        "outliers": detect_outliers(df),
+        "numeric_statistics": numeric_statistics,
+        "correlation_analysis": correlation_analysis,
+        "outliers": outliers,
         "target_analysis": None
     }
 
     if target:
-        eda_result["target_analysis"] = analyze_target_variable(df, target)
+        eda_result["target_analysis"] = analyze_target_variable(
+            df,
+            target
+        )
+
+    quality_score = compute_data_quality_score(
+        df,
+        eda_result
+    )
+
+    eda_result["quality_score"] = quality_score
 
     return eda_result
