@@ -6,6 +6,7 @@ from backend.core.eda.outliers import detect_outliers
 from backend.core.eda.target_analysis import analyze_target_variable
 from backend.core.eda.quality_score import compute_data_quality_score
 from backend.core.eda.insights import generate_dataset_insights
+from backend.core.eda.feature_summary import generate_feature_summary
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
@@ -39,5 +40,13 @@ def run_eda(df: pd.DataFrame, target: str = None) -> dict:
     )
 
     eda_result["insights"] = dataset_insights
+
+    feature_summary = generate_feature_summary(
+        df,
+        eda_result,
+        target
+    )
+
+    eda_result["feature_summary"] = feature_summary
 
     return eda_result
