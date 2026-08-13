@@ -5,6 +5,7 @@ from backend.core.eda.correlation import compute_correlation_analysis
 from backend.core.eda.outliers import detect_outliers
 from backend.core.eda.target_analysis import analyze_target_variable
 from backend.core.eda.quality_score import compute_data_quality_score
+from backend.core.eda.insights import generate_dataset_insights
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
@@ -31,5 +32,12 @@ def run_eda(df: pd.DataFrame, target: str = None) -> dict:
     )
 
     eda_result["quality_score"] = quality_score
+
+    dataset_insights = generate_dataset_insights(
+        df,
+        eda_result
+    )
+
+    eda_result["insights"] = dataset_insights
 
     return eda_result
