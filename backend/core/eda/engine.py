@@ -12,6 +12,7 @@ from backend.core.eda.ml_recommendation import generate_ml_recommendation
 from backend.core.eda.preprocessing import (
     generate_preprocessing_recommendations
 )
+from backend.core.eda.report import generate_dataset_report
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
@@ -63,6 +64,11 @@ def run_eda(df: pd.DataFrame, target: str = None) -> dict:
             df,
             eda_result
         )
+    )
+
+    eda_result["report"] = generate_dataset_report(
+        df,
+        eda_result
     )
 
     return eda_result
