@@ -6,3 +6,5 @@ from .engine import run_eda
 from .insights import generate_dataset_insights
 from .feature_summary import generate_feature_summary
 from .ml_task_detection import detect_ml_task
+from .ml_recommendation import generate_ml_recommendation
+from .preprocessing import generate_preprocessing_recommendations

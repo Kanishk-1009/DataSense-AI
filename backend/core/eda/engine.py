@@ -9,6 +9,9 @@ from backend.core.eda.insights import generate_dataset_insights
 from backend.core.eda.feature_summary import generate_feature_summary
 from backend.core.eda.ml_task_detection import detect_ml_task
 from backend.core.eda.ml_recommendation import generate_ml_recommendation
+from backend.core.eda.preprocessing import (
+    generate_preprocessing_recommendations
+)
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
@@ -53,6 +56,13 @@ def run_eda(df: pd.DataFrame, target: str = None) -> dict:
     eda_result["ml_recommendation"] = generate_ml_recommendation(
         df,
         eda_result
+    )
+
+    eda_result["preprocessing"] = (
+        generate_preprocessing_recommendations(
+            df,
+            eda_result
+        )
     )
 
     return eda_result
