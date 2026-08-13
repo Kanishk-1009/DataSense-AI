@@ -7,6 +7,8 @@ from backend.core.eda.target_analysis import analyze_target_variable
 from backend.core.eda.quality_score import compute_data_quality_score
 from backend.core.eda.insights import generate_dataset_insights
 from backend.core.eda.feature_summary import generate_feature_summary
+from backend.core.eda.ml_task_detection import detect_ml_task
+from backend.core.eda.ml_recommendation import generate_ml_recommendation
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
@@ -27,26 +29,30 @@ def run_eda(df: pd.DataFrame, target: str = None) -> dict:
             target
         )
 
-    quality_score = compute_data_quality_score(
+    eda_result["quality_score"] = compute_data_quality_score(
         df,
         eda_result
     )
 
-    eda_result["quality_score"] = quality_score
-
-    dataset_insights = generate_dataset_insights(
+    eda_result["insights"] = generate_dataset_insights(
         df,
         eda_result
     )
 
-    eda_result["insights"] = dataset_insights
-
-    feature_summary = generate_feature_summary(
+    eda_result["feature_summary"] = generate_feature_summary(
         df,
         eda_result,
         target
     )
 
-    eda_result["feature_summary"] = feature_summary
+    eda_result["ml_task"] = detect_ml_task(
+        df,
+        target
+    )
+
+    eda_result["ml_recommendation"] = generate_ml_recommendation(
+        df,
+        eda_result
+    )
 
     return eda_result
