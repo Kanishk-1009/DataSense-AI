@@ -9,6 +9,7 @@ from backend.core.validator import validate_csv
 from backend.agents.single_agent import run_single_agent
 from backend.agents.multi_agent.graph import run_multi_agent
 from backend.core.persistence import save_result
+from backend.evaluation.evaluator import run_evaluation
 
 
 
@@ -214,3 +215,52 @@ async def analyze_multi_agent(
         "eda": eda_result,
         "agent": agent_result,
     }
+
+
+@app.post("/evaluate")
+async def evaluate_pipelines(
+    file: UploadFile = File(...),
+    target: str = Form(None),
+    model: str = Form("llama3.1:8b"),
+    ollama_url: str = Form("http://localhost:11434"),
+):
+    """
+    M6 Controlled Experiment endpoint.
+
+    Runs the full EDA pipeline **once**, then passes the identical EDA result
+    to both the single-agent (M4) and multi-agent (M5) pipelines.  Returns a
+    structured ``EvaluationResult`` with a per-metric comparison table.
+
+    This is the primary research endpoint: it guarantees that both pipelines
+    receive byte-for-byte identical input so that the pipeline architecture
+    is the sole experimental variable.
+
+    - **file**: CSV dataset to analyse.
+    - **target**: Optional target column name for supervised analysis.
+    - **model**: Ollama model to use (must be pulled locally).
+    - **ollama_url**: URL of the running Ollama server.
+    """
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
+
+    df = pd.read_csv(BytesIO(contents))
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+
+    # EDA computed ONCE — same object passed to both pipelines
+    eda_result = run_eda(df, target=target)
+
+    eval_result = run_evaluation(
+        eda_result=eda_result,
+        dataset_name=file.filename or "unknown",
+        csv_bytes=contents,
+        model=model,
+        base_url=ollama_url,
+        target=target,
+        persist=True,
+    )
+
+    return eval_result.model_dump()
