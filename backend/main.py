@@ -6,6 +6,10 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from backend.core.eda import run_eda
 from backend.core.profiler import profile_dataset
 from backend.core.validator import validate_csv
+from backend.agents.single_agent import run_single_agent
+from backend.agents.multi_agent.graph import run_multi_agent
+from backend.core.persistence import save_result
+
 
 
 app = FastAPI(
@@ -73,5 +77,140 @@ async def eda_dataset(
     file: UploadFile = File(...),
     target: str = Form(None)
 ):
-    df = await _read_uploaded_csv(file)
-    return run_eda(df, target=target)
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
+
+    df = pd.read_csv(BytesIO(contents))
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+
+    eda_result = run_eda(df, target=target)
+
+    try:
+        save_result(
+            pipeline="eda_only",
+            csv_bytes=contents,
+            eda_result=eda_result,
+            metadata={"target": target, "filename": file.filename},
+        )
+    except Exception:
+        pass  # persistence errors must never break the API response
+
+    return eda_result
+
+
+@app.post("/analyze/single-agent")
+async def analyze_single_agent(
+    file: UploadFile = File(...),
+    target: str = Form(None),
+    model: str = Form("llama3.1:8b"),
+    ollama_url: str = Form("http://localhost:11434"),
+):
+    """
+    Run the full EDA pipeline then interpret results with a single
+    LangChain + Ollama LLM call.
+
+    - **file**: CSV dataset to analyse.
+    - **target**: Optional target column name for supervised analysis.
+    - **model**: Ollama model to use (must be pulled locally).
+    - **ollama_url**: URL of the running Ollama server.
+    """
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
+
+    df = pd.read_csv(BytesIO(contents))
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+
+    eda_result = run_eda(df, target=target)
+
+    agent_result = run_single_agent(
+        eda_result,
+        model=model,
+        base_url=ollama_url,
+    )
+
+    try:
+        save_result(
+            pipeline="single_agent",
+            csv_bytes=contents,
+            eda_result=eda_result,
+            agent_result=agent_result,
+            metadata={
+                "target": target,
+                "filename": file.filename,
+                "model": model,
+            },
+        )
+    except Exception:
+        pass  # persistence errors must never break the API response
+
+    return {
+        "eda": eda_result,
+        "agent": agent_result,
+    }
+
+
+@app.post("/analyze/multi-agent")
+async def analyze_multi_agent(
+    file: UploadFile = File(...),
+    target: str = Form(None),
+    model: str = Form("llama3.1:8b"),
+    ollama_url: str = Form("http://localhost:11434"),
+):
+    """
+    Run the full EDA pipeline then interpret results with the multi-agent
+    LangGraph pipeline (7 specialist nodes + Critic/Synthesizer).
+
+    Uses the **same EDA input as** ``/analyze/single-agent`` so results
+    are directly comparable for research purposes.
+
+    - **file**: CSV dataset to analyse.
+    - **target**: Optional target column name for supervised analysis.
+    - **model**: Ollama model to use (must be pulled locally).
+    - **ollama_url**: URL of the running Ollama server.
+    """
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
+
+    df = pd.read_csv(BytesIO(contents))
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+
+    eda_result = run_eda(df, target=target)
+
+    agent_result = run_multi_agent(
+        eda_result,
+        model=model,
+        base_url=ollama_url,
+        target=target,
+    )
+
+    try:
+        save_result(
+            pipeline="multi_agent",
+            csv_bytes=contents,
+            eda_result=eda_result,
+            agent_result=agent_result,
+            metadata={
+                "target": target,
+                "filename": file.filename,
+                "model": model,
+            },
+        )
+    except Exception:
+        pass  # persistence errors must never break the API response
+
+    return {
+        "eda": eda_result,
+        "agent": agent_result,
+    }

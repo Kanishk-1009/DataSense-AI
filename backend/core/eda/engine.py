@@ -13,18 +13,22 @@ from backend.core.eda.preprocessing import (
     generate_preprocessing_recommendations
 )
 from backend.core.eda.report import generate_dataset_report
+from backend.core.eda.feature_importance import compute_feature_importance
+from backend.core.eda.missingness import analyze_missingness
 
 
 def run_eda(df: pd.DataFrame, target: str = None) -> dict:
     numeric_statistics = compute_numeric_statistics(df)
     correlation_analysis = compute_correlation_analysis(df)
     outliers = detect_outliers(df)
+    missingness = analyze_missingness(df)
 
     eda_result = {
         "numeric_statistics": numeric_statistics,
         "correlation_analysis": correlation_analysis,
         "outliers": outliers,
-        "target_analysis": None
+        "missingness": missingness,
+        "target_analysis": None,
     }
 
     if target:
@@ -65,6 +69,22 @@ def run_eda(df: pd.DataFrame, target: str = None) -> dict:
             eda_result
         )
     )
+
+    if target:
+        ml_task = eda_result.get("ml_task", {})
+        task_type = ml_task.get("task")
+        eda_result["feature_importance"] = compute_feature_importance(
+            df,
+            target,
+            task_type=task_type,
+        )
+    else:
+        eda_result["feature_importance"] = {
+            "status": "unavailable",
+            "error": "No target column provided.",
+            "random_forest": [],
+            "mutual_information": [],
+        }
 
     eda_result["report"] = generate_dataset_report(
         df,
