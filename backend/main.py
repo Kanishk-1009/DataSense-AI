@@ -2,6 +2,7 @@ from io import BytesIO
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.eda import run_eda
 from backend.core.profiler import profile_dataset
@@ -12,14 +13,26 @@ from backend.core.persistence import save_result
 from backend.evaluation.evaluator import run_evaluation
 
 
+# Development-friendly CORS: the frontend is not part of this repository yet,
+# so every origin is allowed during local development.  Tighten this list to
+# explicit origins before deploying to production.
+ALLOWED_ORIGINS = ["*"]
 
 app = FastAPI(
     title="Smart Dataset Understanding Agent",
-    version="0.1.0"
+    version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-async def _read_uploaded_csv(file: UploadFile) -> pd.DataFrame:
+async def _read_uploaded_csv(file: UploadFile) -> tuple[pd.DataFrame, bytes]:
 
     validate_csv(file)
 
@@ -49,7 +62,7 @@ async def _read_uploaded_csv(file: UploadFile) -> pd.DataFrame:
             detail="Dataset contains no rows."
         )
 
-    return df
+    return df, contents
 
 
 @app.get("/")
@@ -69,7 +82,7 @@ def health():
 
 @app.post("/upload")
 async def upload_dataset(file: UploadFile = File(...)):
-    df = await _read_uploaded_csv(file)
+    df, _ = await _read_uploaded_csv(file)
     return profile_dataset(df)
 
 
@@ -78,15 +91,7 @@ async def eda_dataset(
     file: UploadFile = File(...),
     target: str = Form(None)
 ):
-    contents = await file.read()
-
-    if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
-
-    df = pd.read_csv(BytesIO(contents))
-
-    if df.empty:
-        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+    df, contents = await _read_uploaded_csv(file)
 
     eda_result = run_eda(df, target=target)
 
@@ -119,15 +124,7 @@ async def analyze_single_agent(
     - **model**: Ollama model to use (must be pulled locally).
     - **ollama_url**: URL of the running Ollama server.
     """
-    contents = await file.read()
-
-    if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
-
-    df = pd.read_csv(BytesIO(contents))
-
-    if df.empty:
-        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+    df, contents = await _read_uploaded_csv(file)
 
     eda_result = run_eda(df, target=target)
 
@@ -177,15 +174,7 @@ async def analyze_multi_agent(
     - **model**: Ollama model to use (must be pulled locally).
     - **ollama_url**: URL of the running Ollama server.
     """
-    contents = await file.read()
-
-    if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
-
-    df = pd.read_csv(BytesIO(contents))
-
-    if df.empty:
-        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+    df, contents = await _read_uploaded_csv(file)
 
     eda_result = run_eda(df, target=target)
 
@@ -240,15 +229,7 @@ async def evaluate_pipelines(
     - **model**: Ollama model to use (must be pulled locally).
     - **ollama_url**: URL of the running Ollama server.
     """
-    contents = await file.read()
-
-    if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded CSV is empty.")
-
-    df = pd.read_csv(BytesIO(contents))
-
-    if df.empty:
-        raise HTTPException(status_code=400, detail="Dataset contains no rows.")
+    df, contents = await _read_uploaded_csv(file)
 
     # EDA computed ONCE — same object passed to both pipelines
     eda_result = run_eda(df, target=target)

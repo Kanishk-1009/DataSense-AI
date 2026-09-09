@@ -32,6 +32,7 @@ try:
     from langchain_core.messages import HumanMessage, SystemMessage
     LANGCHAIN_AVAILABLE = True
 except ImportError:
+    ChatOllama = None  # type: ignore[assignment]
     LANGCHAIN_AVAILABLE = False
 
 from backend.agents.multi_agent.state import MultiAgentState

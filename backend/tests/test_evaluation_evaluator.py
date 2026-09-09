@@ -54,7 +54,7 @@ def minimal_eda():
         "feature_summary": {
             "count": 2,
             "features": {
-                "sex": {"dtype": "object", "unique_count": 2},
+                "sex": {"column": "sex", "column_type": "categorical", "unique_count": 2},
             },
         },
         "ml_task": {

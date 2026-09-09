@@ -1,0 +1,26 @@
+[project]
+name = "datasense-ai"
+version = "0.1.0"
+description = "Smart Dataset Understanding Agent backend API"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1",
+    "langchain>=1.4.0",
+    "langchain-core>=1.6.2",
+    "langchain-ollama>=1.1.0",
+    "langgraph>=1.2.11",
+    "numpy>=2.5.3",
+    "ollama>=0.6.2",
+    "pandas>=3.0.5",
+    "pydantic>=2.13.5",
+    "python-multipart>=0.0.32",
+    "scikit-learn>=1.9.0",
+    "scipy>=1.18.1",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]

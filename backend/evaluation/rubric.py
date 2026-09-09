@@ -75,7 +75,12 @@ def _has_categorical_features(eda: dict) -> bool:
     """True when the feature summary contains at least one categorical feature."""
     features = eda.get("feature_summary", {}).get("features", {})
     for info in features.values():
+        # Real EDA output stores the type under ``column_type``.  The legacy
+        # ``dtype`` key (used by older test fixtures) is kept as a fallback.
+        col_type = str(info.get("column_type", "")).lower()
         dtype = str(info.get("dtype", "")).lower()
+        if col_type in ("categorical", "binary", "datetime"):
+            return True
         if "object" in dtype or "categor" in dtype or "bool" in dtype:
             return True
     return False

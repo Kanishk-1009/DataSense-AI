@@ -52,13 +52,13 @@ def _print_comparison_table(result) -> None:
     width_cat = 14
     width_val = 12
 
-    separator = "─" * (width_metric + width_cat + width_val * 2 + width_val + 6)
+    separator = "-" * (width_metric + width_cat + width_val * 2 + width_val + 6)
 
     print()
-    print("═" * len(separator))
+    print("=" * len(separator))
     print(f"  M6 Evaluation: {result.dataset_name!r}  |  model: {result.model}")
     print(f"  Run ID: {result.run_id}")
-    print("═" * len(separator))
+    print("=" * len(separator))
     print(
         f"  {'Metric':<{width_metric}} {'Category':<{width_cat}} "
         f"{'M4':>{width_val}} {'M5':>{width_val}} {'Better':<{width_val}}"
@@ -66,14 +66,14 @@ def _print_comparison_table(result) -> None:
     print(separator)
 
     for c in result.comparison:
-        better = c.better_pipeline or "—"
+        better = c.better_pipeline or "-"
         print(
             f"  {c.metric:<{width_metric}} {c.category:<{width_cat}} "
             f"{_fmt(c.m4_value):>{width_val}} {_fmt(c.m5_value):>{width_val}} "
             f"{better:<{width_val}}"
         )
         if c.note:
-            print(f"  {'':>{width_metric}}   ↳ {c.note}")
+            print(f"  {'':>{width_metric}}   | {c.note}")
 
     print(separator)
     print()
@@ -81,7 +81,7 @@ def _print_comparison_table(result) -> None:
     # M6-B rubric detail
     print("  M6-B Recommendation Accuracy (rubric detail)")
     print(f"  {'Condition':<30} {'M4':>8} {'M5':>8}")
-    print("  " + "─" * 48)
+    print("  " + "-" * 48)
 
     m4_checks = {c.condition_id: c for c in result.m4.rubric_checks}
     m5_checks = {c.condition_id: c for c in result.m5.rubric_checks}
@@ -93,13 +93,13 @@ def _print_comparison_table(result) -> None:
         for cid in all_ids:
             m4_hit = m4_checks[cid].recommendation_matched if cid in m4_checks else None
             m5_hit = m5_checks[cid].recommendation_matched if cid in m5_checks else None
-            m4_str = "✓" if m4_hit else ("✗" if m4_hit is False else "—")
-            m5_str = "✓" if m5_hit else ("✗" if m5_hit is False else "—")
+            m4_str = "OK" if m4_hit else ("NO" if m4_hit is False else "-")
+            m5_str = "OK" if m5_hit else ("NO" if m5_hit is False else "-")
             print(f"  {cid:<30} {m4_str:>8} {m5_str:>8}")
 
     print()
     print(f"  {result.research_note}")
-    print("═" * len(separator))
+    print("=" * len(separator))
     print()
 
 

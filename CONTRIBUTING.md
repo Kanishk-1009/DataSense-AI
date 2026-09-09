@@ -20,9 +20,11 @@ git clone https://github.com/YOUR_USERNAME/smart-dataset-understanding-agent.git
 Backend:
 
 ```bash
-cd backend
-pip install -r requirements.txt
+uv sync
 ```
+
+The backend is managed with [UV](https://docs.astral.sh/uv/). UV creates a
+virtual environment and installs the pinned dependencies from `uv.lock`.
 
 Frontend:
 
