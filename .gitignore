@@ -76,3 +76,7 @@ uploads/
 # Temporary Files
 *.tmp
 *.bak
+
+.env
+.env.*
+!.env.example
