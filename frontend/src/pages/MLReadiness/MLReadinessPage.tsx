@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Rocket,
@@ -8,13 +9,17 @@ import {
   Target,
   CheckCircle,
   TrendingUp,
+  Crosshair,
+  Hash,
 } from 'lucide-react';
 import { PageHeader, SectionHeader } from '../../components/common/SectionHeader';
 import { Card, CardContent, CardHeader } from '../../components/common/Card';
 import { GaugeScore } from '../../components/common/RadialScore';
 import { ProgressStat } from '../../components/common/StatCard';
-import { Badge } from '../../components/common/UIComponents';
+import { Badge, Tabs } from '../../components/common/UIComponents';
+import { FeatureImportanceChart } from '../../components/charts/FeatureImportanceChart';
 import { useDataset } from '../../hooks/useDataset';
+import type { MLTask, PreprocessingRecommendation } from '../../types/analysis';
 
 function computeMLReadinessScore(eda: ReturnType<typeof useDataset>['edaResult']): {
   overall: number;
@@ -82,6 +87,40 @@ export default function MLReadinessPage() {
   const { edaResult } = useDataset();
   const { overall, categories, recommendations } = computeMLReadinessScore(edaResult);
   const mlRec = edaResult?.ml_recommendation;
+  const mlTask = edaResult?.ml_task;
+  const featureImportance = edaResult?.feature_importance;
+  const [fiTab, setFiTab] = useState('random_forest');
+
+  const ftabs = [
+    { id: 'random_forest', label: 'Random Forest' },
+    { id: 'mutual_information', label: 'Mutual Information' },
+  ];
+
+  const preprocessing = edaResult?.preprocessing?.recommendations || [];
+  const priorityGroups: Record<string, PreprocessingRecommendation[]> = { high: [], medium: [], low: [] };
+  preprocessing.forEach((rec: PreprocessingRecommendation) => {
+    const key = rec.priority in priorityGroups ? rec.priority : 'medium';
+    priorityGroups[key].push(rec);
+  });
+
+  const taskStatusMeta = (task: MLTask | undefined) => {
+    if (!task) return { variant: 'default' as const, label: 'Unknown', desc: 'No ML task analysis available.' };
+    switch (task.status) {
+      case 'detected':
+        return { variant: 'cyan' as const, label: 'Detected', desc: task.reason };
+      case 'target_required':
+        return { variant: 'amber' as const, label: 'Target Required', desc: 'Select a target column to detect the ML task.' };
+      case 'invalid_target':
+        return { variant: 'red' as const, label: 'Invalid Target', desc: task.reason };
+      case 'unsupported':
+        return { variant: 'purple' as const, label: 'Unsupported', desc: task.reason };
+      default:
+        return { variant: 'default' as const, label: 'Unknown', desc: 'No ML task analysis available.' };
+    }
+  };
+
+  const taskMeta = taskStatusMeta(mlTask);
+  const taskConfidencePct = mlTask?.confidence != null ? Math.round(mlTask.confidence * 100) : null;
 
   return (
     <div className="page-container">
@@ -138,6 +177,48 @@ export default function MLReadinessPage() {
         ))}
       </div>
 
+      {/* Feature Importance */}
+      {featureImportance && (featureImportance.status === 'available') && (
+        <>
+          <SectionHeader
+            title="Feature Importance"
+            subtitle="Top predictors identified by model-agnostic analysis"
+            action={
+              <Tabs
+                tabs={ftabs}
+                activeTab={fiTab}
+                onChange={setFiTab}
+              />
+            }
+          />
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                  <TrendingUp size={16} className={fiTab === 'random_forest' ? 'text-accent-cyan' : 'text-accent-purple'} />
+                  {fiTab === 'random_forest' ? 'Random Forest Importance' : 'Mutual Information Scores'}
+                </h3>
+                <Badge variant={fiTab === 'random_forest' ? 'cyan' : 'purple'}>
+                  {featureImportance.target ? `target: ${featureImportance.target}` : featureImportance.task_type || 'all features'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <FeatureImportanceChart
+                data={
+                  fiTab === 'random_forest'
+                    ? featureImportance.random_forest.map((f) => ({ feature: f.feature, importance: f.importance, rank: f.rank }))
+                    : featureImportance.mutual_information.map((f) => ({ feature: f.feature, importance: f.normalized_score, rank: f.rank }))
+                }
+                method={fiTab === 'random_forest' ? 'random_forest' : 'mutual_information'}
+                maxItems={10}
+                height={280}
+              />
+            </CardContent>
+          </Card>
+        </>
+      )}
+
       {/* Recommendations */}
       <SectionHeader title="Recommendations" subtitle="Steps to improve ML readiness" />
       <Card className="mb-8">
@@ -160,6 +241,74 @@ export default function MLReadinessPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ML Task Detection */}
+      <div className="grid lg:grid-cols-3 gap-6 mb-8">
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                <Crosshair size={16} className="text-accent-cyan" />
+                Detected ML Task
+              </h3>
+              <Badge variant={taskMeta.variant}>{taskMeta.label}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {mlTask ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-bg-glass border border-border-primary">
+                  <p className="text-xs text-text-muted mb-1">Task Type</p>
+                  <p className="text-2xl font-bold text-text-primary capitalize">
+                    {mlTask.task_type ? mlTask.task_type.replace('_', ' ') : mlTask.task || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1.5 uppercase tracking-wider">Confidence</p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 flex-1 rounded-full bg-bg-glass overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${taskConfidencePct === null ? 'bg-text-muted' : taskConfidencePct > 70 ? 'bg-green-400' : taskConfidencePct > 40 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        style={{ width: `${taskConfidencePct ?? 0}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-text-primary">
+                      {taskConfidencePct === null ? 'N/A' : `${taskConfidencePct}%`}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm text-text-secondary leading-relaxed">{taskMeta.desc}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">No ML task analysis available.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {mlTask && (
+          <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4">
+            {[
+              { label: 'Target Column', value: mlTask.target || '—', icon: Target },
+              { label: 'Target Type', value: mlTask.target_type || '—', icon: Hash },
+              { label: 'Unique Classes', value: mlTask.unique_classes?.toLocaleString() ?? '—', icon: Layers },
+              { label: 'Missing in Target', value: mlTask.missing_count != null ? `${mlTask.missing_count} (${mlTask.missing_percentage ?? 0}%)` : '—', icon: AlertTriangle },
+            ].map((info) => (
+              <motion.div
+                key={info.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-border-primary bg-bg-card p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <info.icon size={14} className="text-accent-cyan" />
+                  <p className="text-xs text-text-muted uppercase tracking-wider">{info.label}</p>
+                </div>
+                <p className="text-text-primary font-medium truncate" title={String(info.value)}>{info.value}</p>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Recommended Models */}
       {mlRec?.status === 'available' && mlRec.recommended_models.length > 0 && (
@@ -203,6 +352,48 @@ export default function MLReadinessPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Preprocessing Plan */}
+      {preprocessing.length > 0 && (
+        <>
+          <SectionHeader title="Preprocessing Plan" subtitle="Recommended steps to prepare the dataset for modeling" />
+          <div className="grid md:grid-cols-3 gap-4 mb-8">
+            {(['high', 'medium', 'low'] as const).map((priority) => {
+              const group = priorityGroups[priority];
+              if (!group || group.length === 0) return null;
+              const meta = {
+                high: { label: 'High', variant: 'red' as const, color: 'border-red-500/20 bg-red-500/5', text: 'text-red-400', badge: 'bg-red-500/10' },
+                medium: { label: 'Medium', variant: 'amber' as const, color: 'border-amber-500/20 bg-amber-500/5', text: 'text-amber-400', badge: 'bg-amber-500/10' },
+                low: { label: 'Low', variant: 'cyan' as const, color: 'border-accent-cyan/20 bg-accent-cyan/5', text: 'text-accent-cyan', badge: 'bg-accent-cyan/10' },
+              }[priority];
+              return (
+                <motion.div
+                  key={priority}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`rounded-xl border ${meta.color} p-4`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`text-sm font-semibold ${meta.text}`}>{meta.label} Priority</span>
+                    <span className={`px-2 py-0.5 rounded-md text-xs text-text-secondary ${meta.badge}`}>{group.length} steps</span>
+                  </div>
+                  <div className="space-y-2">
+                    {group.map((rec: PreprocessingRecommendation, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-xs text-text-secondary leading-relaxed">
+                        <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${meta.text}`} />
+                        <span>
+                          {rec.column && <span className="text-text-primary font-medium">{rec.column}: </span>}
+                          {rec.action}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

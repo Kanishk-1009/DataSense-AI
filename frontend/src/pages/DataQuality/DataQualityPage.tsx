@@ -5,6 +5,9 @@ import {
   Info,
   CheckCircle,
   XCircle,
+  ArrowUpRight,
+  ArrowDownRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { PageHeader, SectionHeader } from '../../components/common/SectionHeader';
 import { RadialScore } from '../../components/common/RadialScore';
@@ -22,6 +25,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import type { ColumnMissingness, OutlierInfo, PreprocessingRecommendation } from '../../types/analysis';
 
 interface MissingColumn {
   missing_count: number;
@@ -39,9 +43,17 @@ interface ColumnProfile {
 
 interface Recommendation {
   priority: string;
-  column?: string;
+  column?: string | null;
   message: string;
 }
+
+const priorityOrder = ['high', 'medium', 'low'] as const;
+
+const priorityMeta: Record<string, { label: string; variant: 'red' | 'amber' | 'cyan'; icon: typeof XCircle; text: string; bg: string }> = {
+  high: { label: 'High Priority', variant: 'red', icon: ArrowDownRight, text: 'text-red-400', bg: 'bg-red-500/10' },
+  medium: { label: 'Medium Priority', variant: 'amber', icon: AlertTriangle, text: 'text-amber-400', bg: 'bg-amber-500/10' },
+  low: { label: 'Low Priority', variant: 'cyan', icon: ArrowUpRight, text: 'text-accent-cyan', bg: 'bg-accent-cyan/10' },
+};
 
 export default function DataQualityPage() {
   const { profile, edaResult } = useDataset();
@@ -68,6 +80,13 @@ export default function DataQualityPage() {
       .slice(0, 15);
   }, [missingness]);
 
+  const missingDetailData = useMemo(() => {
+    if (!missingness?.columns) return [];
+    return (Object.entries(missingness.columns) as [string, ColumnMissingness][])
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.missing_count - a.missing_count);
+  }, [missingness]);
+
   const outlierChartData = useMemo(() => {
     if (!outliers) return [];
     return (Object.entries(outliers) as [string, OutlierData][])
@@ -82,7 +101,27 @@ export default function DataQualityPage() {
       .slice(0, 15);
   }, [outliers]);
 
+  const outlierDetailData = useMemo(() => {
+    if (!outliers) return [];
+    return (Object.entries(outliers) as [string, OutlierInfo][])
+      .filter(([, v]) => v.count > 0)
+      .map(([name, v]) => ({
+        name,
+        iqr: v.iqr?.count ?? 0,
+        iqrPct: v.iqr?.percentage ?? 0,
+        zscore: v.zscore?.count ?? 0,
+        zscorePct: v.zscore?.percentage ?? 0,
+        iforest: v.isolation_forest?.count ?? 0,
+        iforestPct: v.isolation_forest?.percentage ?? 0,
+        count: v.count,
+        percentage: v.percentage,
+        consensus: v.consensus_count ?? 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [outliers]);
+
   const outlierCount = outlierChartData.reduce((sum, d) => sum + d.count, 0);
+  const outlierColsWith = outlierDetailData.length;
 
   const constantCols = useMemo(() => {
     if (!profile?.columns) return [];
@@ -122,12 +161,60 @@ export default function DataQualityPage() {
     return list;
   }, [quality, constantCols, duplicateCount, duplicatePct]);
 
+  const strengths = useMemo(() => {
+    const list = [...(quality?.strengths || [])];
+    const completeColumns = missingness?.summary?.complete_columns ?? 0;
+    if (completeColumns > 0) list.push(`${completeColumns} column(s) have complete data with no missing values.`);
+    if (duplicateCount === 0) list.push('No duplicate records found — dataset is unique.');
+    if (outlierColsWith === 0) list.push('No extreme outliers detected across numeric features.');
+    return list.slice(0, 8);
+  }, [quality, missingness, duplicateCount, outlierColsWith]);
+
+  const preprocessingGroups = useMemo(() => {
+    const groups: Record<string, PreprocessingRecommendation[]> = { high: [], medium: [], low: [] };
+    (edaResult?.preprocessing?.recommendations || []).forEach((rec) => {
+      const key = rec.priority in groups ? rec.priority : 'medium';
+      groups[key].push(rec);
+    });
+    return groups;
+  }, [edaResult?.preprocessing?.recommendations]);
+
   const getScoreLabel = (score: number) => {
     if (score >= 90) return 'Excellent';
     if (score >= 75) return 'Good';
     if (score >= 60) return 'Fair';
     if (score >= 40) return 'Poor';
     return 'Critical';
+  };
+
+  const missingIndicatorColor = (indicator: string) => {
+    const map: Record<string, string> = {
+      complete: 'bg-green-400',
+      likely_mcar: 'bg-blue-400',
+      likely_mar: 'bg-amber-400',
+      unknown: 'bg-gray-500',
+    };
+    return map[indicator] || 'bg-gray-500';
+  };
+
+  const missingIndicatorLabel = (indicator: string) => {
+    const map: Record<string, { text: string; color: string }> = {
+      complete: { text: 'text-green-400', color: 'border-green-500/20 bg-green-500/10' },
+      likely_mcar: { text: 'text-blue-400', color: 'border-blue-500/20 bg-blue-500/10' },
+      likely_mar: { text: 'text-amber-400', color: 'border-amber-500/20 bg-amber-500/10' },
+      unknown: { text: 'text-text-secondary', color: 'border-border-primary bg-bg-glass' },
+    };
+    return map[indicator] || map.unknown;
+  };
+
+  const missingLabel = (indicator: string) => {
+    const map: Record<string, string> = {
+      complete: 'Complete',
+      likely_mcar: 'MCAR',
+      likely_mar: 'MAR',
+      unknown: 'Unknown',
+    };
+    return map[indicator] || 'Unknown';
   };
 
   return (
@@ -196,7 +283,10 @@ export default function DataQualityPage() {
                       contentStyle={{ background: '#1a1b23', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
                       labelStyle={{ color: '#f0f0f5' }}
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      formatter={(_value: any, _name: any, props: { payload: { fullName: string; percentage: number } }) => [`${_value} (${props.payload.percentage}%)`, props.payload.fullName]}
+                      formatter={(_value: any, _name: any, _item: any, _index: number, tooltipPayload: any) => {
+                        const row = tooltipPayload?.payload as { fullName?: string; percentage?: number } | undefined;
+                        return [`${_value} (${row?.percentage ?? 0}%)`, row?.fullName ?? ''];
+                      }}
                     />
                     <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                       {missingChartData.map((_, i) => (
@@ -255,6 +345,64 @@ export default function DataQualityPage() {
         </Card>
       </div>
 
+      {/* Profile Strengths vs Data Issues */}
+      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                <ShieldCheck size={16} className="text-green-400" />
+                Profile Strengths
+              </h3>
+              <Badge variant="green">{strengths.length} strengths</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2.5">
+              {strengths.length > 0 ? strengths.map((s, i) => (
+                <div key={i} className="flex items-start gap-2.5 text-sm text-text-secondary">
+                  <CheckCircle size={15} className="text-green-400 mt-0.5 shrink-0" />
+                  {s}
+                </div>
+              )) : (
+                <EmptyState icon={<Info size={24} />} title="No Strengths Detected" message="Resolve the issues below to improve dataset quality." />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                <AlertTriangle size={16} className="text-amber-400" />
+                Data Issues
+              </h3>
+              <Badge variant={issues.length > 0 ? 'amber' : 'green'}>{issues.length} issues</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2.5">
+              {issues.length > 0 ? issues.map((issue, i) => (
+                <div key={i} className="flex items-start gap-2.5 text-sm text-text-secondary">
+                  {issue.severity === 'critical' || issue.severity === 'warning' ? (
+                    <XCircle size={15} className="text-amber-400 mt-0.5 shrink-0" />
+                  ) : (
+                    <Info size={15} className="text-accent-cyan mt-0.5 shrink-0" />
+                  )}
+                  <span>
+                    <span className="font-medium text-text-primary">{issue.title}: </span>
+                    {issue.message}
+                  </span>
+                </div>
+              )) : (
+                <EmptyState icon={<CheckCircle size={24} />} title="No Issues Found" message="Dataset quality profile looks clean." />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Outliers */}
       <SectionHeader title="Outlier Analysis" subtitle="Statistical outliers detected across numeric features" />
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
@@ -276,7 +424,10 @@ export default function DataQualityPage() {
                     <Tooltip
                       contentStyle={{ background: '#1a1b23', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      formatter={(_value: any, _name: any, props: { payload: { fullName: string; percentage: number } }) => [`${_value} (${props.payload.percentage}%)`, props.payload.fullName]}
+                      formatter={(_value: any, _name: any, _item: any, _index: number, tooltipPayload: any) => {
+                        const row = tooltipPayload?.payload as { fullName?: string; percentage?: number } | undefined;
+                        return [`${_value} (${row?.percentage ?? 0}%)`, row?.fullName ?? ''];
+                      }}
                     />
                     <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                       {outlierChartData.map((_, i) => (
@@ -294,9 +445,56 @@ export default function DataQualityPage() {
 
         <Card>
           <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary">Outlier Details by Method</h3>
+              <Badge variant="cyan">{outlierColsWith} columns</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {outlierDetailData.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border-primary bg-bg-glass">
+                      <th className="px-4 py-2.5 text-left font-medium text-text-secondary">Column</th>
+                      <th className="px-3 py-2.5 text-right font-medium text-text-secondary">IQR</th>
+                      <th className="px-3 py-2.5 text-right font-medium text-text-secondary">Z-Score</th>
+                      <th className="px-3 py-2.5 text-right font-medium text-text-secondary">Iso. Forest</th>
+                      <th className="px-3 py-2.5 text-right font-medium text-text-secondary">Consensus</th>
+                      <th className="px-4 py-2.5 text-right font-medium text-text-secondary">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outlierDetailData.slice(0, 12).map((o) => (
+                      <tr key={o.name} className="border-b border-border-primary last:border-0 hover:bg-bg-glass transition-colors">
+                        <td className="px-4 py-2.5 font-medium text-text-primary max-w-[160px] truncate">{o.name}</td>
+                        <td className="px-3 py-2.5 text-right text-text-secondary">{o.iqr}</td>
+                        <td className="px-3 py-2.5 text-right text-text-secondary">{o.zscore}</td>
+                        <td className="px-3 py-2.5 text-right text-text-secondary">{o.iforest}</td>
+                        <td className="px-3 py-2.5 text-right text-amber-400">{o.consensus}</td>
+                        <td className="px-4 py-2.5 text-right text-text-primary font-medium">{o.count} ({o.percentage}%)</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-6">
+                <EmptyState icon={<CheckCircle size={24} />} title="No Outliers" message="No outliers detected with any detection method." />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Missingness detail */}
+      <SectionHeader title="Missingness Pattern" subtitle="Per-column missingness with missingness mechanism indicators" />
+      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+        <Card>
+          <CardHeader>
             <h3 className="font-semibold text-text-primary flex items-center gap-2">
               <Info size={16} className="text-accent-cyan" />
-              Missingness Pattern
+              Pattern Summary
             </h3>
           </CardHeader>
           <CardContent>
@@ -308,16 +506,74 @@ export default function DataQualityPage() {
               {missingness?.summary?.likely_mar_columns && missingness.summary.likely_mar_columns.length > 0 && (
                 <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                   <p className="text-amber-400 text-xs font-medium mb-1">Likely MAR (Missing at Random)</p>
-                  <p className="text-text-secondary">{missingness.summary.likely_mar_columns.join(', ')}</p>
+                  <p className="text-text-secondary text-xs">{missingness.summary.likely_mar_columns.join(', ')}</p>
                 </div>
               )}
               {missingness?.summary?.likely_mcar_columns && missingness.summary.likely_mcar_columns.length > 0 && (
                 <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
                   <p className="text-blue-400 text-xs font-medium mb-1">Likely MCAR (Missing Completely at Random)</p>
-                  <p className="text-text-secondary">{missingness.summary.likely_mcar_columns.join(', ')}</p>
+                  <p className="text-text-secondary text-xs">{missingness.summary.likely_mcar_columns.join(', ')}</p>
                 </div>
               )}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="px-2.5 py-1 rounded-lg border border-green-500/20 bg-green-500/10 text-green-400">
+                  {missingness?.summary?.complete_columns ?? 0} complete
+                </span>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary">Missing Values per Column</h3>
+              <Badge variant="amber">{missingDetailData.filter((c) => c.missing_count > 0).length} columns</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {missingDetailData.length > 0 ? (
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-bg-card">
+                    <tr className="border-b border-border-primary bg-bg-glass">
+                      <th className="px-4 py-2.5 text-left font-medium text-text-secondary">Column</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-text-secondary">Missing</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-text-secondary">Severity</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-text-secondary">Mechanism</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {missingDetailData.map((c) => (
+                      <tr key={c.name} className="border-b border-border-primary last:border-0 hover:bg-bg-glass transition-colors">
+                        <td className="px-4 py-2.5 font-medium text-text-primary max-w-[150px] truncate" title={c.name}>{c.name}</td>
+                        <td className="px-3 py-2.5 text-text-secondary">
+                          {c.missing_count} ({c.missing_percentage}%)
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="w-20 h-1.5 rounded-full bg-bg-glass overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${c.missing_percentage > 20 ? 'bg-red-400' : c.missing_percentage > 5 ? 'bg-amber-400' : 'bg-green-400'}`}
+                              style={{ width: `${Math.min(c.missing_percentage, 100)}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-xs ${missingIndicatorLabel(c.indicator).color}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${missingIndicatorColor(c.indicator)}`} />
+                            {missingLabel(c.indicator)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-6">
+                <EmptyState icon={<CheckCircle size={24} />} title="Complete Data" message="No missing values across any column." />
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -334,33 +590,50 @@ export default function DataQualityPage() {
         </>
       )}
 
-      {/* Preprocessing Recommendations */}
-      {edaResult?.preprocessing?.recommendations && edaResult.preprocessing.recommendations.length > 0 && (
+      {/* Preprocessing Recommendations grouped by priority */}
+      {(edaResult?.preprocessing?.recommendations?.length || 0) > 0 && (
         <>
           <SectionHeader title="Preprocessing Recommendations" subtitle="Suggested data preprocessing steps" />
-          <Card className="mb-8">
-            <CardContent>
-              <div className="space-y-3">
-                {edaResult.preprocessing.recommendations.slice(0, 8).map((rec: Recommendation, i: number) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-bg-glass border border-border-primary"
-                  >
-                    <div className={`mt-0.5 p-1 rounded ${rec.priority === 'high' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                      {rec.priority === 'high' ? <XCircle size={14} /> : <AlertTriangle size={14} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {rec.column && <Badge variant="cyan" size="sm">{rec.column}</Badge>}
-                        <Badge variant={rec.priority === 'high' ? 'red' : 'amber'} size="sm">{rec.priority}</Badge>
-                      </div>
-                      <p className="text-sm text-text-secondary">{rec.message}</p>
-                    </div>
+          {priorityOrder.map((priority) => {
+            const group = preprocessingGroups[priority];
+            if (!group || group.length === 0) return null;
+            const meta = priorityMeta[priority];
+            const Icon = meta.icon;
+            return (
+              <Card key={priority} className="mb-4">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                      <Icon size={16} className={`${meta.text}`} />
+                      {meta.label}
+                    </h3>
+                    <Badge variant={meta.variant}>{group.length} step{group.length > 1 ? 's' : ''}</Badge>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {group.map((rec: Recommendation, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-3 p-3 rounded-lg bg-bg-glass border border-border-primary"
+                      >
+                        <div className={`mt-0.5 p-1 rounded ${meta.bg} ${meta.text}`}>
+                          <Icon size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            {rec.column && <Badge variant="cyan" size="sm">{rec.column}</Badge>}
+                            <Badge variant={meta.variant} size="sm">{rec.priority}</Badge>
+                          </div>
+                          <p className="text-sm text-text-secondary">{rec.message}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </>
       )}
     </div>

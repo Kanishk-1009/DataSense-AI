@@ -1,30 +1,30 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
   ArrowRight,
-  BarChart3,
-  Brain,
-  CheckCircle,
   Database,
-  GitBranch,
-  Loader2,
-  ShieldCheck,
   Sparkles,
-  Upload,
+  UploadCloud,
+  CheckCircle,
+  XCircle,
+  Cpu,
 } from 'lucide-react';
 import { useDatasetStore } from '../../store/datasetStore';
 import { getDemoDataset, getDemoDatasetNames } from '../../data/demo';
+import { uploadDataset } from '../../services/datasetApi';
 import { runEDA, runSingleAgent, runMultiAgent } from '../../services/analysisApi';
-import type { EDAResult } from '../../types/analysis';
-import type { DatasetProfile } from '../../types/dataset';
+import { FileDropzone } from '../../components/upload/FileDropzone';
+import { UploadProgress } from '../../components/upload/UploadProgress';
+import { PipelineSelector, type PipelineMode } from '../../components/upload/PipelineSelector';
+import type { UploadStage } from '../../types/api';
 
 const features = [
-  { icon: Database, title: 'Schema Analysis', desc: 'Understand column types, missing values, and data structure.' },
-  { icon: ShieldCheck, title: 'Data Quality', desc: 'Get quality scores, detect outliers, and identify issues.' },
-  { icon: Sparkles, title: 'AI Insights', desc: 'Receive intelligent analysis and recommendations.' },
-  { icon: Brain, title: 'ML Readiness', desc: 'Assess your dataset for machine learning readiness.' },
+  { icon: Database, title: 'Schema Analysis', desc: 'Understand column types, missing values, and data structure.', gradient: 'from-accent-cyan/20 to-accent-blue/20 border-accent-cyan/20' },
+  { icon: Cpu, title: 'Data Quality', desc: 'Get quality scores, detect outliers, and identify issues.', gradient: 'from-accent-green/20 to-accent-cyan/20 border-accent-green/20' },
+  { icon: Sparkles, title: 'AI Insights', desc: 'Receive intelligent analysis and recommendations.', gradient: 'from-accent-purple/20 to-accent-blue/20 border-accent-purple/20' },
+  { icon: AlertCircle, title: 'ML Readiness', desc: 'Assess your dataset for machine learning readiness.', gradient: 'from-accent-amber/20 to-accent-purple/20 border-accent-amber/20' },
 ];
 
 const stats = [
@@ -34,21 +34,93 @@ const stats = [
   { value: '100%', label: 'Open Source' },
 ];
 
+const stepDefs = [
+  { step: 1, title: 'Upload', desc: 'Drag & drop a CSV file' },
+  { step: 2, title: 'Configure', desc: 'Target, pipeline, model' },
+  { step: 3, title: 'Analyze', desc: 'One click — full EDA' },
+];
+
+function HeroTerminal() {
+  const rows = [
+    { label: 'rows', value: '1,289,032', color: 'text-text-primary' },
+    { label: 'columns', value: '24', color: 'text-text-primary' },
+    { label: 'quality_score', value: '87 / 100', color: 'text-green-400' },
+    { label: 'ml_task', value: 'binary_classification', color: 'text-accent-purple' },
+    { label: 'missing_pct', value: '3.2%', color: 'text-amber-400' },
+    { label: 'correlation', value: '+0.84 (fare ↔ class)', color: 'text-accent-cyan' },
+    { label: 'recommended_model', value: 'Gradient Boosting', color: 'text-green-400' },
+  ];
+  return (
+    <div className="relative h-[350px] lg:h-[450px]">
+      <div className="absolute inset-0 rounded-2xl border border-border-primary bg-bg-card/60 backdrop-blur-sm overflow-hidden shadow-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-accent-cyan/5 to-accent-purple/5" />
+        {/* Terminal chrome */}
+        <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-4 py-3 border-b border-border-primary bg-bg-glass">
+          <span className="w-3 h-3 rounded-full bg-red-500/70" />
+          <span className="w-3 h-3 rounded-full bg-amber-500/70" />
+          <span className="w-3 h-3 rounded-full bg-green-500/70" />
+          <span className="ml-3 text-xs font-mono text-text-muted">datasense-eda --csv dataset.csv</span>
+        </div>
+        {/* Terminal body */}
+        <div className="absolute inset-x-4 top-14 bottom-4 flex flex-col gap-2.5 overflow-hidden font-mono text-xs">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="text-accent-cyan"
+          >
+            <span className="text-green-400">$</span> profiling dataset...
+          </motion.div>
+          {rows.map((r, i) => (
+            <motion.div
+              key={r.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 + i * 0.12 }}
+              className="flex items-center gap-3"
+            >
+              <span className="w-32 text-text-muted truncate shrink-0">
+                {r.label}
+                <span className="text-text-muted">:</span>
+              </span>
+              <span className={`${r.color} truncate`}>{r.value}</span>
+              {i === rows.length - 1 && (
+                <span className="inline-block w-1.5 h-3.5 bg-accent-cyan animate-pulse-slow ml-1" />
+              )}
+            </motion.div>
+          ))}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 + rows.length * 0.12 + 0.2 }}
+            className="text-green-400"
+          >
+            ✓ EDA complete — quality checks passed
+          </motion.div>
+        </div>
+        {/* Floating accent */}
+        <div className="absolute -bottom-6 -right-6 w-40 h-40 rounded-full bg-accent-cyan/10 blur-3xl animate-float" />
+      </div>
+    </div>
+  );
+}
+
 export default function Landing() {
   const navigate = useNavigate();
-  const { setProfile, setEdaResult, setFileName, setUploadStage } = useDatasetStore();
+  const { setProfile, setEdaResult, setFileName, setAgentResult, setUploadStage } = useDatasetStore();
 
   const handleLoadDemo = useCallback(
     (name: string) => {
       const demo = getDemoDataset(name);
       if (!demo) return;
+      setAgentResult(null);
       setProfile(demo.analysis.profile);
       setEdaResult(demo.analysis.eda);
       setFileName(demo.name);
       setUploadStage('success');
       navigate('/dashboard');
     },
-    [navigate, setProfile, setEdaResult, setFileName, setUploadStage],
+    [navigate, setProfile, setEdaResult, setFileName, setAgentResult, setUploadStage],
   );
 
   return (
@@ -86,7 +158,7 @@ export default function Landing() {
         <div className="absolute inset-0 bg-gradient-to-b from-accent-cyan/5 via-transparent to-transparent" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-accent-cyan/5 rounded-full blur-[120px]" />
 
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <motion.div
               initial={{ opacity: 0, y: 30 }}
@@ -126,70 +198,8 @@ export default function Landing() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.7, delay: 0.2 }}
-              className="relative h-[350px] lg:h-[450px]"
             >
-              <div className="absolute inset-0 rounded-2xl border border-border-primary bg-bg-card/50 backdrop-blur-sm overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-accent-cyan/5 to-accent-purple/5" />
-                {/* Fallback visual */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="relative w-full h-full">
-                    {/* Animated grid */}
-                    <div className="absolute inset-4 grid grid-cols-6 grid-rows-4 gap-2 opacity-20">
-                      {Array.from({ length: 24 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="rounded bg-accent-cyan/30"
-                          style={{
-                            animationDelay: `${i * 0.1}s`,
-                            animation: 'pulse 3s ease-in-out infinite',
-                          }}
-                        />
-                      ))}
-                    </div>
-                    {/* Floating data points */}
-                    {[
-                      { x: '20%', y: '30%', c: '#38bdf8', s: 12 },
-                      { x: '60%', y: '20%', c: '#a855f7', s: 10 },
-                      { x: '80%', y: '50%', c: '#34d399', s: 14 },
-                      { x: '40%', y: '70%', c: '#fbbf24', s: 8 },
-                      { x: '70%', y: '80%', c: '#6366f1', s: 11 },
-                      { x: '30%', y: '50%', c: '#38bdf8', s: 9 },
-                      { x: '50%', y: '40%', c: '#a855f7', s: 13 },
-                      { x: '15%', y: '65%', c: '#34d399', s: 7 },
-                    ].map((p, i) => (
-                      <div
-                        key={i}
-                        className="absolute rounded-full animate-float"
-                        style={{
-                          left: p.x,
-                          top: p.y,
-                          width: p.s,
-                          height: p.s,
-                          backgroundColor: p.c,
-                          boxShadow: `0 0 ${p.s * 2}px ${p.c}40`,
-                          animationDelay: `${i * 0.7}s`,
-                        }}
-                      />
-                    ))}
-                    {/* Connection lines via SVG */}
-                    <svg className="absolute inset-0 w-full h-full">
-                      <line x1="20%" y1="30%" x2="60%" y2="20%" stroke="#38bdf8" strokeWidth="1" opacity="0.2" />
-                      <line x1="60%" y1="20%" x2="80%" y2="50%" stroke="#a855f7" strokeWidth="1" opacity="0.2" />
-                      <line x1="40%" y1="70%" x2="70%" y2="80%" stroke="#fbbf24" strokeWidth="1" opacity="0.2" />
-                      <line x1="30%" y1="50%" x2="50%" y2="40%" stroke="#38bdf8" strokeWidth="1" opacity="0.2" />
-                      <line x1="50%" y1="40%" x2="80%" y2="50%" stroke="#6366f1" strokeWidth="1" opacity="0.2" />
-                      <line x1="15%" y1="65%" x2="40%" y2="70%" stroke="#34d399" strokeWidth="1" opacity="0.2" />
-                    </svg>
-                    {/* Center label */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-5xl font-bold text-gradient mb-2">DS</div>
-                        <div className="text-sm text-text-muted">Data Intelligence</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <HeroTerminal />
             </motion.div>
           </div>
         </div>
@@ -238,10 +248,11 @@ export default function Landing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1 }}
-                className="rounded-xl border border-border-primary bg-bg-card p-6 hover:border-border-secondary transition-colors"
+                whileHover={{ y: -4 }}
+                className={`rounded-xl border bg-gradient-to-br ${f.gradient} p-6 backdrop-blur-sm hover:shadow-lg transition-all duration-300`}
               >
-                <div className="p-3 rounded-lg bg-accent-cyan/10 text-accent-cyan w-fit mb-4">
-                  <f.icon size={22} />
+                <div className="p-3 rounded-lg bg-bg-card w-fit mb-4">
+                  <f.icon size={22} className="text-accent-cyan" />
                 </div>
                 <h3 className="font-semibold text-text-primary mb-2">{f.title}</h3>
                 <p className="text-sm text-text-secondary leading-relaxed">{f.desc}</p>
@@ -262,13 +273,13 @@ export default function Landing() {
           >
             <h2 className="text-3xl font-bold text-text-primary mb-4">Get Started</h2>
             <p className="text-text-secondary max-w-xl mx-auto">
-              Upload your CSV or explore one of our demo datasets.
+              Upload your CSV or explore one of our demo datasets. Choose a pipeline, then dive into the results.
             </p>
           </motion.div>
 
-          <div className="grid lg:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
             {/* Upload area */}
-            <UploadZone />
+            <UploadFlow />
 
             {/* Demo datasets */}
             <motion.div
@@ -278,6 +289,9 @@ export default function Landing() {
               className="rounded-xl border border-border-primary bg-bg-card p-6"
             >
               <h3 className="font-semibold text-text-primary mb-4">Demo Datasets</h3>
+              <p className="text-sm text-text-secondary mb-4">
+                No file needed — explore with pre-baked EDA results.
+              </p>
               <div className="space-y-2">
                 {getDemoDatasetNames().map((name) => {
                   const demo = getDemoDataset(name);
@@ -323,20 +337,7 @@ export default function Landing() {
   );
 }
 
-type PipelineMode = 'eda' | 'single-agent' | 'multi-agent';
-
-const pipelineOptions: Array<{
-  value: PipelineMode;
-  label: string;
-  icon: typeof BarChart3;
-  desc: string;
-}> = [
-  { value: 'eda', label: 'EDA Only', icon: BarChart3, desc: 'Deterministic analysis only. No LLM required.' },
-  { value: 'single-agent', label: 'Single Agent', icon: Brain, desc: 'EDA + 1 LLM call (LangChain baseline).' },
-  { value: 'multi-agent', label: 'Multi Agent', icon: GitBranch, desc: 'EDA + 7 specialist nodes (LangGraph).' },
-];
-
-function UploadZone() {
+function UploadFlow() {
   const navigate = useNavigate();
   const {
     setProfile,
@@ -344,70 +345,78 @@ function UploadZone() {
     setFileName,
     setUploadStage,
     setAgentResult,
+    setUploadProgress,
     uploadStage,
   } = useDatasetStore();
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [target, setTarget] = useState('');
   const [pipeline, setPipeline] = useState<PipelineMode>('eda');
   const [model, setModel] = useState('llama3.1:8b');
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const progressTimer = useRef<number | null>(null);
 
-  const buildProfile = useCallback((eda: EDAResult): DatasetProfile => {
-    return {
-      dataset_info: {
-        rows: eda.report?.dataset.rows ?? 0,
-        columns: eda.report?.dataset.columns ?? 0,
-        duplicate_rows: 0,
-      },
-      columns: Object.fromEntries(
-        Object.entries(eda.feature_summary?.features ?? {}).map(([k, v]) => [
-          k,
-          {
-            dtype: 'unknown',
-            column_type: v.column_type,
-            unique_values: v.unique_count,
-          },
-        ])
-      ),
-      missing_values: Object.fromEntries(
-        Object.entries(eda.missingness?.columns ?? {}).map(([k, v]) => [
-          k,
-          { count: v.missing_count, percentage: v.missing_percentage },
-        ])
-      ),
-      numeric_statistics: eda.numeric_statistics || {},
-      categorical_statistics: {},
-      warnings: [],
+  useEffect(() => {
+    return () => {
+      if (progressTimer.current) window.clearInterval(progressTimer.current);
     };
   }, []);
 
+  const startProgress = useCallback(
+    (from: number, to: number, duration = 1800) => {
+      if (progressTimer.current) window.clearInterval(progressTimer.current);
+      setUploadProgress(from);
+      const start = Date.now();
+      progressTimer.current = window.setInterval(() => {
+        const elapsed = Date.now() - start;
+        const ratio = Math.min(1, elapsed / duration);
+        const value = from + (to - from) * (0.9 * ratio);
+        setUploadProgress(Math.round(value));
+        if (ratio >= 1 && progressTimer.current) {
+          window.clearInterval(progressTimer.current);
+          progressTimer.current = null;
+        }
+      }, 80);
+    },
+    [setUploadProgress],
+  );
+
   const handleAnalyze = useCallback(async () => {
-    if (!selectedFile) return;
+    if (!file) return;
     setErrorMessage(null);
-    setUploadStage('uploading');
 
+    const runAgentStage = (stage: UploadStage) => {
+      setUploadStage(stage);
+      if (stage === 'uploading') startProgress(0, 30, 1200);
+      if (stage === 'profiling') startProgress(30, 55, 1500);
+      if (stage === 'analyzing') startProgress(55, 95, 20000);
+    };
+
+    runAgentStage('uploading');
     try {
-      const edaResult = await runEDA(selectedFile, target || undefined);
-      setProfile(buildProfile(edaResult));
-      setEdaResult(edaResult);
-      setFileName(selectedFile.name);
+      const profile = await uploadDataset(file);
+      setProfile(profile);
+      runAgentStage('profiling');
 
-      if (pipeline === 'single-agent') {
-        setUploadStage('analyzing');
-        const result = await runSingleAgent(selectedFile, target || undefined, model, ollamaUrl);
-        setAgentResult(result.agent);
-        setEdaResult(result.eda);
-      } else if (pipeline === 'multi-agent') {
-        setUploadStage('analyzing');
-        const result = await runMultiAgent(selectedFile, target || undefined, model, ollamaUrl);
-        setAgentResult(result.agent);
-        setEdaResult(result.eda);
-      } else {
+      if (pipeline === 'eda') {
+        const eda = await runEDA(file, target || undefined);
+        setEdaResult(eda);
         setAgentResult(null);
+      } else if (pipeline === 'single-agent') {
+        runAgentStage('analyzing');
+        const result = await runSingleAgent(file, target || undefined, model, ollamaUrl);
+        setEdaResult(result.eda);
+        setAgentResult(result.agent);
+      } else if (pipeline === 'multi-agent') {
+        runAgentStage('analyzing');
+        const result = await runMultiAgent(file, target || undefined, model, ollamaUrl);
+        setEdaResult(result.eda);
+        setAgentResult(result.agent);
       }
 
+      setFileName(file.name);
+      setUploadProgress(100);
       setUploadStage('success');
       navigate('/dashboard');
     } catch (err) {
@@ -415,7 +424,7 @@ function UploadZone() {
       setErrorMessage(err instanceof Error ? err.message : 'Analysis failed');
     }
   }, [
-    selectedFile,
+    file,
     target,
     pipeline,
     model,
@@ -426,103 +435,9 @@ function UploadZone() {
     setFileName,
     setUploadStage,
     setAgentResult,
-    buildProfile,
+    setUploadProgress,
+    startProgress,
   ]);
-
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.csv')) {
-      setSelectedFile(file);
-      setErrorMessage(null);
-    }
-  }, []);
-
-  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.name.endsWith('.csv')) {
-      setSelectedFile(file);
-      setErrorMessage(null);
-    }
-  }, []);
-
-  const formatSize = (bytes: number) =>
-    bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(2)} MB`;
-
-  if (uploadStage === 'success') {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-      >
-        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-8 text-center">
-          <CheckCircle size={40} className="text-green-400 mx-auto mb-3" />
-          <p className="text-text-primary font-medium">Dataset Ready — Navigating to dashboard...</p>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (uploadStage === 'analyzing') {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-      >
-        <div className="rounded-xl border border-accent-purple/20 bg-accent-purple/5 p-8 text-center">
-          <Loader2 size={32} className="animate-spin text-accent-purple mx-auto mb-4" />
-          <p className="text-text-primary font-medium">🤖 Running AI Analysis (this may take 30–120s)...</p>
-          <p className="text-sm text-text-muted mt-2">LLM analysis in progress — please wait</p>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (uploadStage === 'error') {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-      >
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-8 text-center">
-          <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
-          <p className="text-text-primary font-medium">Analysis Failed</p>
-          <p className="text-sm text-text-secondary mt-1">{errorMessage || 'Please check your CSV and try again.'}</p>
-          <button
-            onClick={() => setUploadStage('idle')}
-            className="mt-4 px-4 py-2 rounded-lg bg-bg-glass border border-border-primary text-sm text-text-secondary hover:text-text-primary transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (uploadStage === 'uploading') {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-      >
-        <div className="rounded-xl border border-accent-cyan/20 bg-accent-cyan/5 p-8 text-center">
-          <Loader2 size={32} className="animate-spin text-accent-cyan mx-auto mb-4" />
-          <p className="text-text-primary font-medium">📊 Running EDA Analysis...</p>
-          <p className="text-sm text-text-muted mt-2">Analyzing dataset structure, quality, and correlations</p>
-        </div>
-      </motion.div>
-    );
-  }
-
-  const selectedPipelineDesc = pipelineOptions.find((o) => o.value === pipeline)?.desc;
 
   return (
     <motion.div
@@ -530,111 +445,113 @@ function UploadZone() {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-      className="space-y-4"
+      className="rounded-xl border border-border-primary bg-bg-card overflow-hidden"
     >
-      {/* Dropzone */}
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={onDrop}
-        onClick={() => document.getElementById('file-upload')?.click()}
-        className="rounded-xl border-2 border-dashed border-border-secondary bg-bg-card p-8 text-center hover:border-accent-cyan/30 transition-all duration-200 cursor-pointer group"
-      >
-        <input type="file" accept=".csv" onChange={onFileChange} className="hidden" id="file-upload" />
-        <div className="p-4 rounded-xl bg-bg-glass w-fit mx-auto mb-4 group-hover:bg-accent-cyan/10 transition-colors">
-          <Upload size={32} className="text-text-muted group-hover:text-accent-cyan transition-colors" />
-        </div>
-        <p className="text-text-primary font-medium">Drop your CSV here</p>
-        <p className="text-sm text-text-muted mt-1">or browse files from your computer</p>
-        <p className="text-xs text-text-muted mt-3">Accepts .csv files</p>
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-border-primary flex items-center justify-between">
+        <h3 className="font-semibold text-text-primary flex items-center gap-2">
+          <UploadCloud size={16} className="text-accent-cyan" />
+          Analyze Your Dataset
+        </h3>
+        {uploadStage === 'success' && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-400">
+            <CheckCircle size={14} />
+            Done
+          </span>
+        )}
+        {uploadStage === 'error' && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-400">
+            <XCircle size={14} />
+            Failed
+          </span>
+        )}
       </div>
 
-      {/* Config panel */}
-      {selectedFile && (
-        <div className="space-y-4 rounded-xl border border-border-primary bg-bg-card p-5">
-          {/* File info row */}
-          <div className="flex items-center justify-between rounded-lg bg-bg-glass px-3 py-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <Database size={16} className="text-accent-cyan shrink-0" />
-              <span className="text-sm text-text-primary font-medium truncate">{selectedFile.name}</span>
-            </div>
-            <span className="text-xs text-text-muted shrink-0">{formatSize(selectedFile.size)}</span>
-          </div>
-
-          {/* Target input */}
-          <div>
-            <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1 block">
-              Target Column (optional)
-            </label>
-            <input
-              type="text"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder="e.g. Survived, price"
-              className="bg-bg-card border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-cyan/50 transition-colors w-full"
-            />
-            <p className="text-xs text-text-muted mt-1">Leave blank for unsupervised analysis.</p>
-          </div>
-
-          {/* Pipeline selector */}
-          <div>
-            <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1 block">Analysis Pipeline</label>
-            <div className="grid grid-cols-3 gap-2">
-              {pipelineOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setPipeline(opt.value)}
-                  className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs transition-all duration-200 ${
-                    pipeline === opt.value
-                      ? 'border-accent-cyan bg-accent-cyan/10 text-accent-cyan'
-                      : 'border-border-primary bg-bg-glass text-text-secondary hover:border-border-secondary'
-                  }`}
-                >
-                  <opt.icon size={20} />
-                  <span className="font-medium">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-text-muted mt-1.5">{selectedPipelineDesc}</p>
-          </div>
-
-          {/* Ollama config */}
-          {(pipeline === 'single-agent' || pipeline === 'multi-agent') && (
-            <div className="space-y-3 rounded-lg border border-border-primary bg-bg-glass/50 p-3">
-              <div>
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1 block">Ollama Model</label>
-                <input
-                  type="text"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="llama3.1:8b"
-                  className="bg-bg-card border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-cyan/50 transition-colors w-full"
-                />
+      <div className="p-5">
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 mb-5">
+          {stepDefs.map((s, i) => (
+            <div key={s.step} className={`flex items-center gap-2 ${i < stepDefs.length - 1 ? 'flex-1' : ''}`}>
+              <div
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 border text-xs font-medium transition-all duration-300 ${
+                  (uploadStage === 'idle' || uploadStage === 'error') && i === 0
+                    ? 'border-accent-cyan/30 bg-accent-cyan/10 text-accent-cyan'
+                    : 'border-border-primary bg-bg-glass text-text-muted'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  i === 0 && (uploadStage === 'idle' || uploadStage === 'error') ? 'bg-accent-cyan text-bg-primary' : 'bg-bg-card text-text-muted'
+                }`}>
+                  {s.step}
+                </span>
+                <span className="hidden sm:inline">{s.title}</span>
               </div>
-              <div>
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1 block">Ollama Server URL</label>
-                <input
-                  type="text"
-                  value={ollamaUrl}
-                  onChange={(e) => setOllamaUrl(e.target.value)}
-                  placeholder="http://localhost:11434"
-                  className="bg-bg-card border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-cyan/50 transition-colors w-full"
-                />
-              </div>
-              <p className="text-xs text-text-muted">ℹ️ Ollama must be running locally. If unavailable, EDA results will still be returned.</p>
+              {i < stepDefs.length - 1 && <div className="h-px flex-1 bg-border-primary" />}
             </div>
-          )}
-
-          {/* Analyze button */}
-          <button
-            onClick={handleAnalyze}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-accent-cyan to-accent-blue text-white font-semibold hover:opacity-90 transition-opacity"
-          >
-            Analyze Dataset
-            <ArrowRight size={18} />
-          </button>
+          ))}
         </div>
-      )}
+
+        {uploadStage === 'success' ? (
+          <UploadProgress stage="success" pipeline={pipeline} />
+        ) : uploadStage === 'analyzing' || uploadStage === 'profiling' || uploadStage === 'uploading' ? (
+          <span className="block">
+            <UploadProgress stage={uploadStage} pipeline={pipeline} />
+          </span>
+        ) : uploadStage === 'error' ? (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center">
+            <AlertCircle size={36} className="text-red-400 mx-auto mb-3" />
+            <p className="text-text-primary font-medium">Analysis Failed</p>
+            <p className="text-sm text-text-secondary mt-1 mb-4">{errorMessage || 'Please check your CSV and try again.'}</p>
+            <button
+              onClick={() => setUploadStage('idle')}
+              className="px-4 py-2 rounded-lg bg-bg-glass border border-border-primary text-sm text-text-secondary hover:text-text-primary transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {/* Step 1: Upload */}
+            <FileDropzone
+              file={file}
+              onFileChange={(f) => {
+                setFile(f);
+                setErrorMessage(null);
+              }}
+            />
+
+            {/* Step 2: Configure */}
+            {file && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <PipelineSelector
+                  pipeline={pipeline}
+                  onPipelineChange={setPipeline}
+                  target={target}
+                  onTargetChange={setTarget}
+                  model={model}
+                  onModelChange={setModel}
+                  ollamaUrl={ollamaUrl}
+                  onOllamaUrlChange={setOllamaUrl}
+                />
+              </motion.div>
+            )}
+
+            {/* Step 3: Analyze */}
+            {file && (
+              <button
+                onClick={handleAnalyze}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-accent-cyan to-accent-blue text-white font-semibold hover:opacity-90 transition-opacity group"
+              >
+                Analyze Dataset
+                <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }

@@ -9,6 +9,7 @@ export type UploadStage =
   | 'dragging'
   | 'selected'
   | 'uploading'
+  | 'profiling'
   | 'analyzing'
   | 'processing'
   | 'success'

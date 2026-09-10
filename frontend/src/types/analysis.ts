@@ -1,3 +1,5 @@
+import type { NumericStats } from './dataset';
+
 export interface OutlierMethod {
   count: number;
   percentage: number;
@@ -185,6 +187,20 @@ export interface EDAResult {
   };
 }
 
+export interface SpecialistAgentOutput {
+  findings: string | null;
+  risk_level: string;
+  recommendations: string[];
+  error?: string;
+}
+
+export interface AgentExtra {
+  llm_call_count?: number;
+  per_node_time?: Record<string, number>;
+  specialist_outputs?: Record<string, SpecialistAgentOutput>;
+  [key: string]: unknown;
+}
+
 export interface AgentResponse {
   status: 'success' | 'error' | 'unavailable';
   model: string;
@@ -195,7 +211,7 @@ export interface AgentResponse {
   recommendations: string[];
   confidence: number | null;
   error: string | null;
-  extra: Record<string, unknown>;
+  extra: AgentExtra;
 }
 
 export interface FullAnalysisResult {

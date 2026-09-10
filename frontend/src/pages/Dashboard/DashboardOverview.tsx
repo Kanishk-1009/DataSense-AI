@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Database,
@@ -11,6 +12,13 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  ShieldCheck,
+  Compass,
+  Brain,
+  Rocket,
+  ArrowRight,
+  Sparkles,
+  MessageSquare,
 } from 'lucide-react';
 import { PageHeader } from '../../components/common/SectionHeader';
 import { StatCard } from '../../components/common/StatCard';
@@ -18,21 +26,32 @@ import { RadialScore } from '../../components/common/RadialScore';
 import { Badge, Select } from '../../components/common/UIComponents';
 import { Card, CardContent } from '../../components/common/Card';
 import { useDataset } from '../../hooks/useDataset';
+import { useDatasetStore } from '../../store/datasetStore';
 import type { ColumnProfile, MissingValueInfo } from '../../types/dataset';
 
 type SortKey = 'name' | 'type' | 'missing' | 'unique';
 type SortDir = 'asc' | 'desc';
 
+const quickNav = [
+  { to: '/dashboard/quality', label: 'Data Quality', icon: ShieldCheck, desc: 'Quality score, missingness & outliers', color: 'text-accent-cyan', bg: 'bg-accent-cyan/10' },
+  { to: '/dashboard/exploration', label: 'Exploration', icon: Compass, desc: 'Distributions, correlations & relationships', color: 'text-accent-blue', bg: 'bg-accent-blue/10' },
+  { to: '/dashboard/insights', label: 'AI Insights', icon: Brain, desc: 'Narrative analysis & feature importance', color: 'text-accent-purple', bg: 'bg-accent-purple/10' },
+  { to: '/dashboard/ml-readiness', label: 'ML Readiness', icon: Rocket, desc: 'Task detection & model recommendations', color: 'text-accent-green', bg: 'bg-accent-green/10' },
+];
+
 export default function DashboardOverview() {
+  const navigate = useNavigate();
   const { profile, edaResult, fileName, healthScore, healthGrade } = useDataset();
+  const agentResult = useDatasetStore((s) => s.agentResult);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [expandedCol, setExpandedCol] = useState<string | null>(null);
 
   const info = profile?.dataset_info;
-  const columns = profile?.columns || {};
-  const missingVals = profile?.missing_values || {};
+  const columns = useMemo(() => profile?.columns || {}, [profile]);
+  const missingVals = useMemo(() => profile?.missing_values || {}, [profile]);
+  const warnings = profile?.warnings || [];
 
   const numericCount = useMemo(
     () => Object.values(columns).filter((c: ColumnProfile) => c.column_type === 'numeric').length,
@@ -106,6 +125,9 @@ export default function DashboardOverview() {
     return <span className={`inline-block w-2 h-2 rounded-full ${colors[q] || 'bg-gray-400'}`} />;
   };
 
+  const keyFindings = edaResult?.report?.key_findings || edaResult?.insights?.insights || [];
+  const keyFindingsCount = keyFindings.length;
+
   if (!profile) return null;
 
   return (
@@ -122,6 +144,38 @@ export default function DashboardOverview() {
         </div>
       </PageHeader>
 
+      {/* AI Analysis Ready banner */}
+      {agentResult?.status === 'success' && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 rounded-xl border border-accent-purple/20 bg-accent-purple/5 p-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 rounded-xl bg-accent-purple/10 border border-accent-purple/20 shrink-0">
+                <Sparkles size={18} className="text-accent-purple" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-text-primary">
+                  AI Analysis Ready
+                </p>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  {agentResult.pipeline === 'multi_agent' ? 'Multi Agent' : 'Single Agent'} · {agentResult.model} · {agentResult.execution_time_seconds.toFixed(1)}s — {agentResult.key_risks.length} risks · {agentResult.recommendations.length} recommendations
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/dashboard/insights')}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-purple/10 text-accent-purple border border-accent-purple/20 hover:bg-accent-purple/20 transition-colors text-sm font-medium shrink-0"
+            >
+              View AI Insights
+              <ArrowRight size={15} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <StatCard icon={Database} label="Rows" value={(info?.rows || 0).toLocaleString()} sublabel="Total records" color="text-accent-cyan" index={0} />
@@ -131,6 +185,54 @@ export default function DashboardOverview() {
         <StatCard icon={Hash} label="Numeric" value={numericCount} sublabel="Features" color="text-cyan-400" index={4} />
         <StatCard icon={Tag} label="Categorical" value={catCount} sublabel="Features" color="text-purple-400" index={5} />
       </div>
+
+      {/* Quick-nav cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {quickNav.map((q, i) => (
+          <motion.button
+            key={q.to}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 + i * 0.05 }}
+            onClick={() => navigate(q.to)}
+            className="text-left rounded-xl border border-border-primary bg-bg-card p-5 hover:border-border-secondary hover:bg-bg-card-hover transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className={`p-2.5 rounded-lg ${q.bg} ${q.color}`}>
+                <q.icon size={18} />
+              </div>
+              <ArrowRight size={15} className="text-text-muted group-hover:text-accent-cyan group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <h4 className="font-medium text-text-primary text-sm mb-1">{q.label}</h4>
+            <p className="text-xs text-text-muted leading-relaxed">{q.desc}</p>
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Key Findings (report summary) */}
+      {keyFindingsCount > 0 && (
+        <div className="mb-8 rounded-xl border border-border-primary bg-gradient-to-br from-accent-cyan/5 to-accent-purple/5 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Info size={15} className="text-accent-cyan" />
+            <h3 className="font-semibold text-text-primary text-sm">Report Summary — Key Findings</h3>
+            <Badge variant="cyan">{keyFindingsCount}</Badge>
+          </div>
+          <div className="grid gap-2">
+            {keyFindings.slice(0, 6).map((f: string, i: number) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="flex items-start gap-2.5 text-sm text-text-secondary"
+              >
+                <span className="text-accent-cyan mt-0.5 shrink-0">→</span>
+                {f}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[1fr_280px] gap-6">
         {/* Schema Table */}
@@ -254,7 +356,7 @@ export default function DashboardOverview() {
           </CardContent>
         </Card>
 
-        {/* Health Score */}
+        {/* Side column: Health + Warnings */}
         <div className="space-y-6">
           <Card>
             <CardContent className="flex flex-col items-center py-8">
@@ -284,11 +386,40 @@ export default function DashboardOverview() {
             </CardContent>
           </Card>
 
+          {/* Warnings panel */}
+          {warnings.length > 0 && (
+            <Card>
+              <div className="px-5 py-4 border-b border-border-primary">
+                <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-amber-400" />
+                  Warnings
+                  <Badge variant="amber">{warnings.length}</Badge>
+                </h3>
+              </div>
+              <CardContent>
+                <div className="space-y-2.5">
+                  {warnings.map((w, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.06 }}
+                      className="flex items-start gap-2 text-xs text-text-secondary"
+                    >
+                      <AlertTriangle size={13} className="text-amber-400 mt-0.5 shrink-0" />
+                      {w}
+                    </motion.div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {edaResult?.insights && (
             <Card>
               <div className="px-5 py-4 border-b border-border-primary">
                 <h3 className="font-semibold text-text-primary flex items-center gap-2">
-                  <Info size={16} className="text-accent-cyan" />
+                  <MessageSquare size={16} className="text-accent-cyan" />
                   Key Insights
                 </h3>
               </div>

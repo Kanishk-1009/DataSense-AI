@@ -13,42 +13,25 @@ import { PageHeader, SectionHeader } from '../../components/common/SectionHeader
 import { Card, CardContent, CardHeader } from '../../components/common/Card';
 import { Badge } from '../../components/common/UIComponents';
 import { RadialScore } from '../../components/common/RadialScore';
+import { MetricComparisonTable } from '../../components/analysis/MetricComparison';
 import { runEvaluation } from '../../services/datasetApi';
 import { useDatasetStore } from '../../store/datasetStore';
 import type {
-  MetricComparison,
   PipelineMetrics,
   RubricCheckResult,
 } from '../../types/evaluation';
 
-const categoryOrder = ['CORRECTNESS', 'STRUCTURAL', 'EFFICIENCY', 'DESCRIPTIVE', 'SELF-REPORTED'];
-
-const categoryVariant: Record<string, 'cyan' | 'default' | 'amber' | 'purple' | 'green'> = {
-  STRUCTURAL: 'cyan',
-  DESCRIPTIVE: 'default',
-  EFFICIENCY: 'amber',
-  'SELF-REPORTED': 'purple',
-  CORRECTNESS: 'green',
-};
-
-function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return 'N/A';
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);
-  if (Array.isArray(v)) return `[${v.map(formatValue).join(', ')}]`;
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
-}
-
-function betterLabel(v: string | null): string | null {
-  if (!v) return null;
-  const l = v.toLowerCase();
-  if (l.includes('m4') || l.includes('single')) return 'M4';
-  if (l.includes('m5') || l.includes('multi')) return 'M5';
-  return v;
-}
-
 function formatSize(bytes: number) {
   return bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(2)} MB`;
+}
+
+function keywordCoverage(checks: RubricCheckResult[]) {
+  const total = checks.reduce((sum, c) => sum + c.expected_keywords.length, 0);
+  const matched = checks.reduce(
+    (sum, c) => sum + (c.recommendation_matched ? c.expected_keywords.length : 0),
+    0,
+  );
+  return { matched, total, pct: total > 0 ? (matched / total) * 100 : 0 };
 }
 
 const inputClass =
@@ -112,64 +95,6 @@ function PipelineCard({
         </CardContent>
       </Card>
     </motion.div>
-  );
-}
-
-function ComparisonTable({ comparison }: { comparison: MetricComparison[] }) {
-  const sorted = [...comparison].sort(
-    (a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category),
-  );
-
-  return (
-    <Card>
-      <CardHeader>
-        <h3 className="font-semibold text-text-primary">Metric Comparison</h3>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto rounded-xl border border-border-primary">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border-primary bg-bg-glass">
-                <th className="px-4 py-3 text-left font-medium text-text-secondary">Metric</th>
-                <th className="px-4 py-3 text-left font-medium text-text-secondary">Category</th>
-                <th className="px-4 py-3 text-left font-medium text-text-secondary">M4 Value</th>
-                <th className="px-4 py-3 text-left font-medium text-text-secondary">M5 Value</th>
-                <th className="px-4 py-3 text-left font-medium text-text-secondary">Better</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((row, i) => {
-                const label = betterLabel(row.better_pipeline);
-                return (
-                  <tr key={i} className="border-b border-border-primary last:border-0 hover:bg-bg-glass transition-colors">
-                    <td className="px-4 py-3 font-medium text-text-primary">{row.metric}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={categoryVariant[row.category] ?? 'default'}>{row.category}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">{formatValue(row.m4_value)}</td>
-                    <td className="px-4 py-3 text-text-secondary">{formatValue(row.m5_value)}</td>
-                    <td className="px-4 py-3">
-                      {label ? (
-                        <span
-                          className={`flex items-center gap-1.5 font-medium ${
-                            label === 'M4' ? 'text-accent-cyan' : 'text-accent-purple'
-                          }`}
-                        >
-                          <Trophy size={14} />
-                          {label}
-                        </span>
-                      ) : (
-                        <span className="text-text-muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -261,6 +186,9 @@ export default function EvaluationPage() {
       setLoading(false);
     }
   }, [file, target, model, ollamaUrl, setEvaluationResult]);
+
+  const coverageM4 = evaluationResult ? keywordCoverage(evaluationResult.m4.rubric_checks) : null;
+  const coverageM5 = evaluationResult ? keywordCoverage(evaluationResult.m5.rubric_checks) : null;
 
   return (
     <div className="page-container">
@@ -363,9 +291,45 @@ export default function EvaluationPage() {
             <PipelineCard title="Multi Agent (M5)" metrics={evaluationResult.m5} accent="purple" />
           </div>
 
+          {/* Narrative Keyword Coverage */}
+          {coverageM4 && coverageM5 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <h3 className="font-semibold text-text-primary flex items-center gap-2">
+                  <Info size={16} className="text-accent-cyan" />
+                  Narrative Keyword Coverage
+                </h3>
+              </CardHeader>
+              <CardContent>
+                <div className="grid sm:grid-cols-2 gap-6">
+                  {[
+                    { label: 'Single Agent (M4)', cov: coverageM4, color: 'bg-accent-cyan', text: 'text-accent-cyan', border: 'border-accent-cyan/20' },
+                    { label: 'Multi Agent (M5)', cov: coverageM5, color: 'bg-accent-purple', text: 'text-accent-purple', border: 'border-accent-purple/20' },
+                  ].map((p) => (
+                    <div key={p.label} className={`rounded-xl border ${p.border} bg-bg-glass p-4`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-text-primary">{p.label}</span>
+                        <span className={`text-sm font-semibold ${p.text}`}>{p.cov.pct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-2.5 rounded-full bg-bg-card overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${p.color}`}
+                          style={{ width: `${p.cov.pct}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-text-muted mt-2">
+                        {p.cov.matched} of {p.cov.total} expected keywords matched in the generated narrative.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Metric Comparison */}
           <div className="mb-6">
-            <ComparisonTable comparison={evaluationResult.comparison} />
+            <MetricComparisonTable comparison={evaluationResult.comparison} />
           </div>
 
           {/* Rubric Checks */}
