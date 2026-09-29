@@ -1,240 +1,132 @@
-# Smart Dataset Understanding Agent
+# DataSense AI
 
-An automated dataset analysis system that combines deterministic Exploratory
-Data Analysis (EDA) with LLM-based interpretation to help users understand
-datasets before building machine learning models.
+### Smart Dataset Understanding Agent
 
-## Project Overview
+> An intelligent, AI-powered platform for automated dataset profiling, exploratory data analysis, data-quality assessment, machine-learning readiness analysis, and multi-agent dataset interpretation.
 
-The Smart Dataset Understanding Agent analyses uploaded CSV datasets and
-produces structured insights — column metadata, missing-value patterns,
-statistical outliers, correlation analysis, feature importance, data quality
-scores, and ML task recommendations. The project is developed incrementally:
-a deterministic profiling pipeline forms the shared input for both a
-single-agent (LangChain) and a multi-agent (LangGraph) system, enabling a
-fair and reproducible evaluation.
+[![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)](https://pandas.pydata.org/)
+[![Scikit--learn](https://img.shields.io/badge/Scikit--learn-Machine%20Learning-F7931E?logo=scikit-learn)](https://scikit-learn.org/)
+[![Ollama](https://img.shields.io/badge/Ollama-LLM-black)](https://ollama.com/)
 
-## Current Progress
+---
 
-* [x] M1 Project Setup
-* [x] M2 CSV Ingestion & Profiling
-* [x] M3 Deterministic EDA Engine
-* [x] M4 Single-Agent Pipeline (LangChain + Ollama baseline)
-* [x] M5 Multi-Agent Pipeline (LangGraph — 7 specialist nodes)
-* [x] M6 Evaluation
-* [ ] Frontend
-* [ ] Research Experiments
+## Overview
 
-## Features Implemented
+DataSense AI is a Smart Dataset Understanding Agent designed to automate the initial and often time-consuming stages of a machine-learning workflow.
 
-**Deterministic EDA (M2 & M3)**
+When a new dataset is received, data scientists and ML practitioners typically need to manually inspect:
 
-* CSV upload and validation through FastAPI
-* Dataset profiling (rows, columns, dtypes, duplicates)
-* Column type detection (numeric, categorical, binary, datetime)
-* Missing value analysis with MCAR/MAR heuristic indicators
-* Numeric statistics (mean, median, std, skewness, kurtosis, quartiles)
-* Pearson correlation matrix + Cramér's V (categorical) + Point-Biserial (binary↔numeric)
-* Outlier detection — IQR, Z-Score, and Isolation Forest (with consensus count)
-* Target variable analysis and class distribution
-* Feature importance — Random Forest + Mutual Information (ranked)
-* Data quality score (0–100) with grade, strengths, and issues
-* Rule-based preprocessing recommendations
-* Unified per-run report
-* Result persistence to `results/raw/` (timestamped, content-addressed JSON)
+- Dataset structure
+- Data types
+- Missing values
+- Duplicate records
+- Statistical distributions
+- Correlations
+- Outliers
+- Feature characteristics
+- Potential target variables
+- Machine-learning task type
+- Preprocessing requirements
+- Model recommendations
+- Overall dataset quality
 
-**Multi-Agent Pipeline (M5)**
+DataSense AI brings these processes together into a single intelligent platform.
 
-* LangGraph `StateGraph` with parallel fan-out (Missing Value, Correlation, Outlier) and sequential fan-in
-* 7 specialist nodes — each makes one focused LLM call on its own EDA slice
-* `Annotated` reducers for safe concurrent state merging
-* Critic/Synthesizer synthesises all specialist outputs into a unified `AgentResponse`
-* `POST /analyze/multi-agent` endpoint
-* Per-node timing (`per_node_time`) and total LLM call count (`llm_call_count`) tracked in `extra`
-* Same `AgentResponse` schema as M4 — directly comparable
-* Same persistence mechanism as M4
+The system combines **deterministic data analysis** with **LLM-powered interpretation** to provide structured, reproducible analysis while allowing AI agents to explain findings in natural language.
 
-**Testing**
+---
 
-* All existing and newly added tests pass via `pytest`
-* Tests cover every module including mocked LLM calls
+# Key Features
 
-## Project Structure
+## 1. Automated Dataset Profiling
+
+Upload a CSV dataset and automatically obtain:
+
+- Number of rows and columns
+- Column names
+- Data types
+- Missing-value statistics
+- Unique-value information
+- Numerical statistics
+- Categorical statistics
+- Dataset warnings
+- Structural information
+
+---
+
+## 2. Exploratory Data Analysis
+
+DataSense AI performs automated EDA including:
+
+- Numerical statistics
+- Feature summaries
+- Correlation analysis
+- Missingness analysis
+- Outlier detection
+- Target analysis
+- Feature importance
+- Dataset-level insights
+- Preprocessing recommendations
+
+The analysis is performed programmatically using Python data-analysis libraries before AI interpretation.
+
+---
+
+## 3. Data Quality Analysis
+
+The platform evaluates common dataset-quality problems such as:
+
+- Missing values
+- Duplicate records
+- Outliers
+- Invalid or inconsistent data
+- Feature-quality issues
+- Potential preprocessing requirements
+
+A quality scoring mechanism is also included to provide a structured representation of dataset quality.
+
+---
+
+## 4. Machine Learning Readiness
+
+DataSense AI analyzes whether a dataset appears suitable for machine-learning workflows.
+
+The system can identify:
+
+- Potential ML task type
+- Candidate target variables
+- Feature characteristics
+- Class distribution
+- Missing-data concerns
+- Outlier risks
+- Preprocessing requirements
+- ML recommendations
+
+The ML-readiness analysis is intended to assist users before model development begins.
+
+---
+
+## 5. AI-Powered Dataset Interpretation
+
+The platform integrates AI agents to interpret deterministic analysis results.
+
+Two analysis architectures are supported:
+
+### Single-Agent Architecture
+
+A centralized AI agent receives the structured dataset analysis and generates an overall interpretation.
 
 ```text
-smart-dataset-agent/
-│
-├── backend/
-│   ├── agents/
-│   │   ├── schemas.py               # Shared AgentResponse Pydantic model
-│   │   ├── single_agent.py          # M4: LangChain single-agent pipeline
-│   │   └── multi_agent/
-│   │       ├── __init__.py
-│   │       ├── state.py             # MultiAgentState TypedDict + reducers
-│   │       ├── prompts.py           # Focused system prompts (7 agents)
-│   │       ├── nodes.py             # 7 node functions
-│   │       └── graph.py             # LangGraph assembly + run_multi_agent()
-│   ├── core/
-│   │   ├── eda/
-│   │   │   ├── correlation.py       # Pearson + Cramér's V + Point-Biserial
-│   │   │   ├── feature_importance.py # RF + Mutual Information
-│   │   │   ├── missingness.py       # MCAR/MAR heuristic indicators
-│   │   │   ├── outliers.py          # IQR + Z-Score + Isolation Forest
-│   │   │   ├── quality_score.py
-│   │   │   ├── preprocessing.py
-│   │   │   ├── ml_task_detection.py
-│   │   │   ├── ml_recommendation.py
-│   │   │   ├── insights.py
-│   │   │   ├── feature_summary.py
-│   │   │   ├── report.py
-│   │   │   └── engine.py
-│   │   ├── persistence.py      # Save results to results/raw/
-│   │   ├── profiler.py
-│   │   └── validator.py
-│   ├── evaluation/             # M6 controlled experiment framework
-│   │   ├── evaluator.py        # run_evaluation() — M4 vs M5 on identical EDA
-│   │   ├── metrics.py          # Metric scorers (structural/descriptive/…)
-│   │   ├── rubric.py           # Ground-truth correctness rubric (M6-B)
-│   │   ├── schemas.py          # PipelineMetrics / EvaluationResult
-│   │   └── runner.py           # CLI runner (--dry-run supported)
-│   ├── tests/                  # pytest suite (mocked LLM — no Ollama needed)
-│   └── main.py
-│
-├── datasets/
-│   ├── iris.csv
-│   ├── wine.csv
-│   ├── california_housing.csv
-│   ├── titanic.csv
-│   ├── adult_income.csv
-│   └── test.csv
-│
-├── results/
-│   ├── raw/      ← frozen experiment outputs (auto-generated)
-│   └── metrics/  ← evaluation metrics (M6)
-│
-├── research/
-├── README.md
-├── pyproject.toml        # UV-managed project configuration
-├── uv.lock               # Reproducible dependency lock (UV)
-└── .gitignore
-```
-
-## Tech Stack
-
-* Python 3.14 (managed by UV)
-* FastAPI + Uvicorn
-* Pandas, NumPy, SciPy, scikit-learn
-* LangChain + langchain-ollama (Ollama backend)
-* LangGraph
-* Pytest
-
-## Run Backend
-
-The project is managed with [UV](https://docs.astral.sh/uv/). UV manages the
-Python interpreter (3.14), the virtual environment, and all dependencies.
-
-Install dependencies and create the environment:
-
-```bash
-uv sync
-```
-
-> UV installs a managed Python 3.14 interpreter automatically if one is not
-> present on your machine.
-
-Start the FastAPI server:
-
-```bash
-uv run uvicorn backend.main:app --reload
-```
-
-Open the interactive API docs:
-
-```
-http://127.0.0.1:8000/docs
-```
-
-## LLM requirement (Ollama)
-
-The deterministic endpoints **do not require Ollama**:
-
-| Endpoint | Requires Ollama? |
-|---|---|
-| `GET /` | No |
-| `GET /health` | No |
-| `POST /upload` | No |
-| `POST /eda` | No |
-| `POST /analyze/single-agent` | **Yes** — 1 LLM call |
-| `POST /analyze/multi-agent` | **Yes** — 7 LLM calls |
-| `POST /evaluate` | **Yes** — runs both agent pipelines |
-
-If Ollama is **not** running, `/analyze/single-agent`, `/analyze/multi-agent`,
-and `/evaluate` return `status: "error"` with a connection error — the EDA
-result is still returned. Only the LLM interpretation is skipped. The FastAPI
-process never crashes.
-
-Install and start Ollama for the agent endpoints:
-
-```bash
-# https://ollama.com
-ollama pull llama3.1:8b
-ollama serve          # defaults to http://localhost:11434
-```
-
-The default model is `llama3.1:8b`. Override it (and the Ollama URL) per
-request via the `model` and `ollama_url` form fields.
-
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/` | Health check |
-| `GET` | `/health` | Health check |
-| `POST` | `/upload` | CSV profiling (M2) |
-| `POST` | `/eda` | Full deterministic EDA (M3) |
-| `POST` | `/analyze/single-agent` | EDA + single LLM call (M4) |
-| `POST` | `/analyze/multi-agent` | EDA + 7-node LangGraph pipeline (M5) |
-| `POST` | `/evaluate` | M4 vs M5 controlled experiment (M6) |
-
-All `POST` endpoints take a multipart `file` (CSV). The agent/evaluate
-endpoints also accept optional `target`, `model`, and `ollama_url` form
-fields.
-
-## Run Tests
-
-```bash
-uv run pytest
-```
-
-All tests mock LLM calls, so they run **without Ollama**. The suite covers
-every module plus FastAPI HTTP smoke tests (`/`, `/health`, `/upload`, `/eda`).
-
-## Run the M6 Evaluation CLI
-
-A dry-run (mocked LLM, no Ollama needed) validates the full evaluation
-pipeline structure:
-
-```bash
-uv run python -m backend.evaluation.runner --csv datasets/titanic.csv --target Survived --dry-run
-```
-
-A real experiment requires Ollama:
-
-```bash
-uv run python -m backend.evaluation.runner --csv datasets/titanic.csv --target Survived
-```
-
-## Development Roadmap
-
-### Next Steps
-
-* Frontend for the API (upload → EDA → agent interpretation → evaluation dashboard)
-* Research experiments comparing M4 vs M5 across benchmark datasets
-* Explainability improvements for the multi-agent pipeline
-
-## Research Goal
-
-This project supports research on intelligent dataset understanding by
-comparing deterministic analysis with AI-driven interpretation. A stable,
-reproducible deterministic profiling pipeline serves as the common input
-for both the single-agent and multi-agent systems, enabling a fair evaluation.
+Dataset
+   ↓
+Deterministic Analysis
+   ↓
+Structured EDA Results
+   ↓
+Single AI Agent
+   ↓
+Natural-Language Analysis
