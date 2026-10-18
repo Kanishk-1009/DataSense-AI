@@ -25,6 +25,7 @@ so the graph can continue to the Critic even if one specialist fails.
 from __future__ import annotations
 
 import json
+import re
 import time
 
 try:
@@ -56,14 +57,21 @@ def _get_llm(state: MultiAgentState) -> "ChatOllama":
         model=state["model"],
         temperature=0.2,
         base_url=state["base_url"],
+        format="json",
+        timeout=120.0,
+        num_predict=1000,
     )
 
 
-def _call_llm(llm: "ChatOllama", system_prompt: str, user_content: str) -> dict:
+def _call_llm(llm: "ChatOllama", system_prompt: str, user_content: str, agent_name: str = "") -> dict:
     """
-    Invoke the LLM and parse the JSON response.
+    Invoke the LLM and parse the JSON response using robust extraction.
     Returns the parsed dict, or a dict with an ``_parse_error`` key on failure.
     """
+    if agent_name:
+        print(f"🤖 [M5 MULTI-AGENT] Running specialist: {agent_name}...", flush=True)
+    start_call = time.perf_counter()
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
@@ -71,20 +79,51 @@ def _call_llm(llm: "ChatOllama", system_prompt: str, user_content: str) -> dict:
     response = llm.invoke(messages)
     raw = response.content.strip()
 
-    # Strip accidental markdown fences
-    if raw.startswith("```"):
-        raw = "\n".join(
-            line for line in raw.splitlines()
-            if not line.strip().startswith("```")
-        ).strip()
+    if agent_name:
+        elapsed = round(time.perf_counter() - start_call, 2)
+        print(f"✅ [M5 MULTI-AGENT] Completed: {agent_name} ({elapsed}s)", flush=True)
 
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {
-            "raw_response": raw,
-            "_parse_error": "LLM response was not valid JSON.",
-        }
+    def _try_load(candidate: str) -> dict | None:
+        try:
+            val = json.loads(candidate)
+            if isinstance(val, dict):
+                return val
+        except json.JSONDecodeError:
+            try:
+                cleaned = re.sub(r",\s*([\]}])", r"\1", candidate)
+                val = json.loads(cleaned)
+                if isinstance(val, dict):
+                    return val
+            except Exception:
+                pass
+        return None
+
+    # Strategy 1: Direct JSON parse
+    parsed = _try_load(raw)
+    if parsed is not None:
+        return parsed
+
+    # Strategy 2: Code fence blocks
+    fence_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
+    matches = re.findall(fence_pattern, raw)
+    for block in matches:
+        parsed = _try_load(block.strip())
+        if parsed is not None:
+            return parsed
+
+    # Strategy 3: First '{' to last '}'
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = raw[start : end + 1].strip()
+        parsed = _try_load(candidate)
+        if parsed is not None:
+            return parsed
+
+    return {
+        "raw_response": raw,
+        "_parse_error": "LLM response was not valid JSON.",
+    }
 
 
 def _node_unavailable(node_name: str, reason: str) -> dict:
@@ -120,7 +159,7 @@ def missing_value_node(state: MultiAgentState) -> dict:
             "Analyse the following missingness data and return your findings:\n\n"
             + json.dumps(missingness, indent=2, default=str)
         )
-        result = _call_llm(llm, MISSING_VALUE_PROMPT, user_msg)
+        result = _call_llm(llm, MISSING_VALUE_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {"error": str(exc), "findings": None,
                   "risk_level": "unknown", "recommendations": []}
@@ -154,7 +193,7 @@ def correlation_node(state: MultiAgentState) -> dict:
             "Analyse the following correlation data and return your findings:\n\n"
             + json.dumps(trimmed, indent=2, default=str)
         )
-        result = _call_llm(llm, CORRELATION_PROMPT, user_msg)
+        result = _call_llm(llm, CORRELATION_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {"error": str(exc), "findings": None,
                   "risk_level": "unknown", "recommendations": []}
@@ -181,7 +220,7 @@ def outlier_node(state: MultiAgentState) -> dict:
             "findings:\n\n"
             + json.dumps(outliers, indent=2, default=str)
         )
-        result = _call_llm(llm, OUTLIER_PROMPT, user_msg)
+        result = _call_llm(llm, OUTLIER_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {"error": str(exc), "findings": None,
                   "risk_level": "unknown", "recommendations": []}
@@ -229,7 +268,7 @@ def feature_importance_node(state: MultiAgentState) -> dict:
             "Analyse the following feature importance and summary data:\n\n"
             + json.dumps(payload, indent=2, default=str)
         )
-        result = _call_llm(llm, FEATURE_IMPORTANCE_PROMPT, user_msg)
+        result = _call_llm(llm, FEATURE_IMPORTANCE_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {"error": str(exc), "findings": None,
                   "risk_level": "unknown", "recommendations": []}
@@ -264,7 +303,7 @@ def preprocessing_node(state: MultiAgentState) -> dict:
             "Produce a prioritised preprocessing plan based on the following:\n\n"
             + json.dumps(payload, indent=2, default=str)
         )
-        result = _call_llm(llm, PREPROCESSING_PROMPT, user_msg)
+        result = _call_llm(llm, PREPROCESSING_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {"error": str(exc), "steps": [], "priority_issues": [],
                   "risk_level": "unknown"}
@@ -301,7 +340,7 @@ def algorithm_recommendation_node(state: MultiAgentState) -> dict:
             "following data:\n\n"
             + json.dumps(payload, indent=2, default=str)
         )
-        result = _call_llm(llm, ALGORITHM_PROMPT, user_msg)
+        result = _call_llm(llm, ALGORITHM_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {"error": str(exc), "recommended_models": [],
                   "reasoning": [], "risk_level": "unknown"}
@@ -350,7 +389,7 @@ def critic_synthesizer_node(state: MultiAgentState) -> dict:
             "Synthesise the specialist findings into a final analysis:\n\n"
             + json.dumps(payload, indent=2, default=str)
         )
-        result = _call_llm(llm, CRITIC_SYNTHESIZER_PROMPT, user_msg)
+        result = _call_llm(llm, CRITIC_SYNTHESIZER_PROMPT, user_msg, node_name)
     except Exception as exc:
         result = {
             "narrative": None,

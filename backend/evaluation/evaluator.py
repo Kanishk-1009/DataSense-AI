@@ -225,8 +225,17 @@ def run_evaluation(
     # ------------------------------------------------------------------
     # Run both pipelines on the same EDA object
     # ------------------------------------------------------------------
+    print("\n" + "=" * 60, flush=True)
+    print(f"🎯 [M6 EVALUATION STARTED] Dataset: '{dataset_name}' | Model: {model}", flush=True)
+    print("=" * 60, flush=True)
+
+    print("\n👉 Step 1/2: Running Single-Agent Pipeline (M4)...", flush=True)
     m4_response = run_single_agent(eda_result, model=model, base_url=base_url)
+
+    print("\n👉 Step 2/2: Running Multi-Agent Pipeline (M5: 7 specialists)...", flush=True)
     m5_response = run_multi_agent(eda_result, model=model, base_url=base_url, target=target)
+
+    print("\n📊 Scoring responses and building comparison table...", flush=True)
 
     # ------------------------------------------------------------------
     # Assert identity after pipelines complete (must still be same object)

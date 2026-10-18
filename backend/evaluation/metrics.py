@@ -28,10 +28,13 @@ Public API
 
 from __future__ import annotations
 
+import re
+
 from backend.evaluation.schemas import PipelineMetrics, RubricCheckResult
 from backend.evaluation.rubric import (
     GROUND_TRUTH_RUBRIC,
     extract_triggered_conditions,
+    get_effective_targets,
 )
 
 
@@ -161,6 +164,137 @@ def score_llm_call_count(agent_response: dict) -> int:
 # M6-B: recommendation correctness
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# M6-B: Action-Object Dependency Grammar & Negation Guards
+# ---------------------------------------------------------------------------
+
+NEGATION_TOKENS: set[str] = {
+    "not", "no", "never", "avoid", "don't", "dont", "shouldn't", "shouldnt",
+    "cannot", "cant", "can't", "without", "neither", "nor", "stop", "refrain",
+    "prevent", "won't", "wont", "hardly", "scarcely", "rarely",
+}
+
+
+def _split_into_sentences(text: str) -> list[str]:
+    """
+    Split a block of text into distinct sentences and list items.
+    Preserves list item boundaries (newlines, bullet points) and punctuation (.!?).
+    """
+    if not text or not isinstance(text, str):
+        return []
+    lines = re.split(r"[\n\r]+", text)
+    sentences: list[str] = []
+    for line in lines:
+        line = line.strip()
+        line = re.sub(r"^[\s*\->•\d\.\)]+\s*", "", line).strip()
+        if not line:
+            continue
+        parts = re.split(r"(?<=[.!?])\s+", line)
+        for part in parts:
+            p = part.strip()
+            if p:
+                sentences.append(p)
+    return sentences
+
+
+def _tokenize_sentence(sentence: str) -> list[str]:
+    """
+    Extract alphanumeric tokens, preserving apostrophes for contractions (e.g. don't).
+    """
+    return re.findall(r"[a-z0-9_]+(?:'[a-z]+)?", sentence.lower())
+
+
+def _evaluate_action_object_grammar(
+    sentence: str,
+    actions: list[str],
+    targets: list[str],
+    negation_window: int = 4,
+) -> tuple[bool, str | None]:
+    """
+    Evaluate whether a sentence contains an affirmative (non-negated) Action
+    paired with an expected Target in the same clause/sentence.
+
+    Returns
+    -------
+    (matched: bool, explanation: str | None)
+    """
+    tokens = _tokenize_sentence(sentence)
+    if not tokens:
+        return False, None
+
+    sentence_lower = sentence.lower()
+
+    # 1. Identify Target in the sentence
+    has_target = False
+    matched_target = None
+    for tgt in targets:
+        t_clean = tgt.lower().strip()
+        if not t_clean:
+            continue
+        if " " in t_clean or "-" in t_clean:
+            if t_clean in sentence_lower:
+                has_target = True
+                matched_target = t_clean
+                break
+        else:
+            for tok in tokens:
+                if (
+                    tok == t_clean
+                    or tok.startswith(t_clean)
+                    or t_clean.startswith(tok)
+                    or (len(t_clean) >= 4 and t_clean in tok)
+                ):
+                    has_target = True
+                    matched_target = tok
+                    break
+        if has_target:
+            break
+
+    if not has_target:
+        return False, None
+
+    # 2. Identify candidate Action tokens in the sentence
+    action_matches: list[tuple[int, str]] = []
+    for idx, tok in enumerate(tokens):
+        for act in actions:
+            a_clean = act.lower().strip()
+            if not a_clean:
+                continue
+            if (
+                tok == a_clean
+                or tok.startswith(a_clean)
+                or (len(a_clean) >= 4 and a_clean in tok)
+            ):
+                action_matches.append((idx, tok))
+                break
+
+    # Also check multi-word actions
+    for act in actions:
+        a_clean = act.lower().strip()
+        if (" " in a_clean or "-" in a_clean) and a_clean in sentence_lower:
+            neg_pattern = (
+                r"\b("
+                + "|".join(re.escape(n) for n in NEGATION_TOKENS)
+                + r")\b.{1,25}"
+                + re.escape(a_clean)
+            )
+            if not re.search(neg_pattern, sentence_lower):
+                return True, f"Affirmative multi-word action '{a_clean}' paired with target '{matched_target}'"
+
+    if not action_matches:
+        return False, None
+
+    # 3. Negation Guard: check preceding tokens for each candidate action
+    for idx, act_tok in action_matches:
+        start_idx = max(0, idx - negation_window)
+        preceding = tokens[start_idx:idx]
+        is_negated = any(neg in NEGATION_TOKENS for neg in preceding)
+        if not is_negated:
+            return True, f"Affirmative action '{act_tok}' paired with target '{matched_target}'"
+
+    return False, "Target present but all candidate actions were negated"
+
+
 def score_recommendation_accuracy(
     agent_response: dict,
     eda_result: dict,
@@ -169,45 +303,52 @@ def score_recommendation_accuracy(
     CORRECTNESS metric (M6-B).
 
     Compares the agent's recommendations against the ground-truth rubric
-    to assess whether the agent addressed the issues actually present in
-    the dataset.
+    using Action-Object Dependency Grammar with Negation Guards.
 
-    Algorithm
-    ---------
-    1. Identify which rubric conditions are triggered by ``eda_result``.
-    2. For each triggered condition, check whether any recommendation in
-       ``agent_response['recommendations']`` contains at least one of the
-       expected keywords (case-insensitive substring match).
-    3. Return the ratio of conditions correctly addressed.
-
-    Parameters
-    ----------
-    agent_response:
-        The dict returned by ``run_single_agent()`` or ``run_multi_agent()``.
-    eda_result:
-        The same EDA dict passed to the agent.
-
-    Returns
-    -------
-    (accuracy, rubric_checks)
-        accuracy       : float in [0, 1] or None (when no conditions triggered)
-        rubric_checks  : list of RubricCheckResult for audit trail
+    Guarantees:
+    - Verifies affirmative action (kriya) on valid target (karam/column).
+    - Rejects negative instructions (e.g. 'do not drop', 'avoid removing').
+    - Injects dataset-specific column names dynamically from EDA results.
+    - Operates sentence-by-sentence to eliminate accidental distant keyword hits.
     """
     triggered = extract_triggered_conditions(eda_result)
+    if not triggered:
+        return None, []
 
-    # Build a single string of all recommendations for fast keyword search
+    # Gather all candidate sentences from recommendations and narrative
+    all_sentences: list[str] = []
     recs = agent_response.get("recommendations", [])
-    rec_text = " ".join(str(r) for r in recs).lower() if recs else ""
+    if isinstance(recs, list):
+        for r in recs:
+            all_sentences.extend(_split_into_sentences(str(r)))
 
-    # Also check narrative for keyword coverage
-    narrative = str(agent_response.get("narrative") or "").lower()
-    combined_text = rec_text + " " + narrative
+    narrative = str(agent_response.get("narrative") or "")
+    if narrative.strip():
+        all_sentences.extend(_split_into_sentences(narrative))
 
     checks: list[RubricCheckResult] = []
     matched = 0
 
     for entry in triggered:
-        hit = any(kw.lower() in combined_text for kw in entry.expected_keywords)
+        effective_targets = get_effective_targets(entry, eda_result)
+        actions = entry.expected_actions
+
+        hit = False
+        # Fallback to expected_keywords if entry doesn't have actions/targets configured
+        if not actions or not effective_targets:
+            combined_text = " ".join(all_sentences).lower()
+            hit = any(kw.lower() in combined_text for kw in entry.expected_keywords)
+        else:
+            for sentence in all_sentences:
+                is_match, _ = _evaluate_action_object_grammar(
+                    sentence=sentence,
+                    actions=actions,
+                    targets=effective_targets,
+                )
+                if is_match:
+                    hit = True
+                    break
+
         checks.append(
             RubricCheckResult(
                 condition_id=entry.condition_id,
@@ -219,9 +360,6 @@ def score_recommendation_accuracy(
         )
         if hit:
             matched += 1
-
-    if not triggered:
-        return None, []
 
     accuracy = round(matched / len(triggered), 4)
     return accuracy, checks

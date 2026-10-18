@@ -6,6 +6,8 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
+*.egg-info/
+*.egg
 
 # Virtual Environment
 venv/
@@ -15,6 +17,7 @@ env/
 # Environment Variables
 .env
 .env.*
+!.env.example
 
 # Pytest
 .pytest_cache/
@@ -76,7 +79,3 @@ uploads/
 # Temporary Files
 *.tmp
 *.bak
-
-.env
-.env.*
-!.env.example
