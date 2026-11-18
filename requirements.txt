@@ -1,0 +1,16 @@
+# DataSense AI Backend Dependencies (FastAPI + LangChain + LangGraph)
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.12
+pandas>=2.2.0
+numpy>=1.26.0
+scipy>=1.13.0
+scikit-learn>=1.5.0
+pydantic>=2.8.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-ollama>=0.2.0
+langgraph>=0.2.0
+ollama>=0.3.0
+httpx>=0.27.0
+pytest>=8.0.0

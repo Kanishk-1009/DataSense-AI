@@ -1,8 +1,11 @@
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.core.eda import run_eda
 from backend.core.profiler import profile_dataset
@@ -65,12 +68,31 @@ async def _read_uploaded_csv(file: UploadFile) -> tuple[pd.DataFrame, bytes]:
     return df, contents
 
 
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if (FRONTEND_DIST / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+
 @app.get("/")
-def root():
+def root(request: Request):
+    accept = request.headers.get("accept", "")
+    index_file = FRONTEND_DIST / "index.html"
+    if "text/html" in accept and index_file.exists():
+        return FileResponse(index_file)
     return {
         "message": "Smart Dataset Understanding Agent API",
         "status": "running"
     }
+
+
+@app.get("/dashboard", include_in_schema=False)
+@app.get("/dashboard/{full_path:path}", include_in_schema=False)
+async def serve_dashboard_spa(full_path: str = ""):
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Frontend dist not found. Run 'npm run build' inside frontend/.")
 
 
 @app.get("/health")
@@ -245,3 +267,12 @@ async def evaluate_pipelines(
     )
 
     return eval_result.model_dump()
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port, reload=False)
+

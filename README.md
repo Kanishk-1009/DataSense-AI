@@ -1,16 +1,17 @@
 # DataSense AI
-
 ### Smart Dataset Understanding Agent
 
-> An intelligent, AI-powered platform for automated dataset profiling, exploratory data analysis, data-quality assessment, machine-learning readiness analysis, and multi-agent dataset interpretation.
+An intelligent, AI-powered platform for automated dataset profiling, exploratory data analysis, data-quality assessment, machine-learning readiness analysis, and multi-agent dataset interpretation.
 
-[![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-3178C6?logo=typescript)](https://www.typescriptlang.org/)
-[![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)](https://pandas.pydata.org/)
-[![Scikit--learn](https://img.shields.io/badge/Scikit--learn-Machine%20Learning-F7931E?logo=scikit-learn)](https://scikit-learn.org/)
-[![Ollama](https://img.shields.io/badge/Ollama-LLM-black)](https://ollama.com/)
+![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi)
+![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-3178C6?logo=typescript)
+![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)
+![Scikit-learn](https://img.shields.io/badge/Scikit--learn-Machine%20Learning-F7931E?logo=scikit-learn)
+![LangChain](https://img.shields.io/badge/LangChain-LLM%20Framework-1C3C3C)
+![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-orange)
+![Ollama](https://img.shields.io/badge/Ollama-LLM-black)
 
 ---
 
@@ -20,16 +21,12 @@ DataSense AI is a Smart Dataset Understanding Agent designed to automate the ini
 
 When a new dataset is received, data scientists and ML practitioners typically need to manually inspect:
 
-- Dataset structure
-- Data types
-- Missing values
-- Duplicate records
-- Statistical distributions
-- Correlations
-- Outliers
-- Feature characteristics
+- Dataset structure and data types
+- Missing values and duplicate records
+- Statistical distributions and correlations
+- Outliers and feature characteristics
 - Potential target variables
-- Machine-learning task type
+- Machine-learning task types
 - Preprocessing requirements
 - Model recommendations
 - Overall dataset quality
@@ -38,17 +35,14 @@ DataSense AI brings these processes together into a single intelligent platform.
 
 The system combines **deterministic data analysis** with **LLM-powered interpretation** to provide structured, reproducible analysis while allowing AI agents to explain findings in natural language.
 
----
+## Key Features
 
-# Key Features
-
-## 1. Automated Dataset Profiling
+### 1. Automated Dataset Profiling
 
 Upload a CSV dataset and automatically obtain:
 
 - Number of rows and columns
-- Column names
-- Data types
+- Column names and data types
 - Missing-value statistics
 - Unique-value information
 - Numerical statistics
@@ -56,9 +50,7 @@ Upload a CSV dataset and automatically obtain:
 - Dataset warnings
 - Structural information
 
----
-
-## 2. Exploratory Data Analysis
+### 2. Exploratory Data Analysis
 
 DataSense AI performs automated EDA including:
 
@@ -74,9 +66,7 @@ DataSense AI performs automated EDA including:
 
 The analysis is performed programmatically using Python data-analysis libraries before AI interpretation.
 
----
-
-## 3. Data Quality Analysis
+### 3. Data Quality Analysis
 
 The platform evaluates common dataset-quality problems such as:
 
@@ -87,11 +77,9 @@ The platform evaluates common dataset-quality problems such as:
 - Feature-quality issues
 - Potential preprocessing requirements
 
-A quality scoring mechanism is also included to provide a structured representation of dataset quality.
+A quality-scoring mechanism provides a structured representation of dataset quality.
 
----
-
-## 4. Machine Learning Readiness
+### 4. Machine Learning Readiness
 
 DataSense AI analyzes whether a dataset appears suitable for machine-learning workflows.
 
@@ -106,19 +94,17 @@ The system can identify:
 - Preprocessing requirements
 - ML recommendations
 
-The ML-readiness analysis is intended to assist users before model development begins.
+The ML-readiness analysis assists users before model development begins.
 
----
-
-## 5. AI-Powered Dataset Interpretation
+### 5. AI-Powered Dataset Interpretation
 
 The platform integrates AI agents to interpret deterministic analysis results.
 
 Two analysis architectures are supported:
 
-### Single-Agent Architecture
+**Single-Agent Architecture (M4)**
 
-A centralized AI agent receives the structured dataset analysis and generates an overall interpretation.
+A centralized AI agent receives structured dataset analysis and generates an overall interpretation.
 
 ```text
 Dataset
@@ -127,172 +113,274 @@ Deterministic Analysis
    ↓
 Structured EDA Results
    ↓
-Single AI Agent (LangChain)
+Single AI Agent
    ↓
-Natural-Language Analysis & Recommendations
+Natural-Language Analysis
 ```
 
-### Multi-Agent Specialist Architecture (LangGraph)
+**Multi-Agent Architecture (M5)**
 
-A specialized multi-agent graph partitions the analysis into focused specialist nodes that run with parallel fan-out / fan-in and feed into a synthesis critic:
+A LangGraph-based architecture uses specialized agents to analyze different aspects of a dataset. Specialist nodes process missing values, outliers, and correlations concurrently, followed by downstream synthesis and interpretation stages.
 
 ```text
-                       START
-                         │
-          ┌──────────────┼──────────────┐   (Parallel Fan-Out)
-          ▼              ▼              ▼
-   Missing Value    Correlation      Outlier
-      Agent            Agent          Agent
-          │              │              │
-          └──────────────┼──────────────┘   (Fan-In: Join)
-                         ▼
-             Feature Importance Agent
-                         ▼
-            Preprocessing Planner Agent
-                         ▼
-          Algorithm Recommendation Agent
-                         ▼
-             Critic & Synthesizer Agent
-                         │
-                        END
+                  Dataset
+                     ↓
+             Deterministic EDA
+                     ↓
+             Structured Evidence
+                     ↓
+          ┌──────────┼──────────┐
+          ↓          ↓          ↓
+       Missing     Outlier   Correlation
+        Agent       Agent       Agent
+          └──────────┼──────────┘
+                     ↓
+              Analysis Stages
+                     ↓
+                Critic Agent
+                     ↓
+              Final Synthesis
+                     ↓
+             Dataset Insights
 ```
 
----
+### 6. Controlled Evaluation Framework
 
-## Getting Started & How to Run
+The project includes an evaluation framework for comparing the Single-Agent and Multi-Agent architectures.
 
-### Prerequisites
-- **Python**: 3.10+ (tested on Python 3.13 / 3.14)
-- **Node.js**: 18+ (tested on Node v20 / v22) and npm
-- **Ollama**: Local install or remote GPU (e.g. Google Colab) with `llama3.1:8b` model pulled
+It evaluates:
 
----
+- Recommendation accuracy
+- Structural completeness
+- Execution time
+- LLM call count
 
-### Step 1: Backend Setup & Run
-
-1. Clone repository and navigate to the project root:
-   ```bash
-   cd DataSense-AI
-   ```
-
-2. Create and activate a Python virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate    # On Windows: .venv\Scripts\activate
-   ```
-
-3. Install backend dependencies in editable mode:
-   ```bash
-   pip install -e .
-   ```
-
-4. Start the FastAPI backend server:
-   ```bash
-   uvicorn backend.main:app --reload --port 8000
-   ```
-   Backend will be running at `http://localhost:8000` (API documentation available at `http://localhost:8000/docs`).
+The comparison uses the same deterministic EDA evidence for both architectures.
 
 ---
 
-### Step 2: Frontend Setup & Run
+## Technology Stack
 
-1. Open a new terminal and navigate to the frontend directory:
-   ```bash
-   cd DataSense-AI/frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start the Vite development server:
-   ```bash
-   npm run dev
-   ```
-   Open your browser and navigate to `http://localhost:5173`.
-
----
-
-### Step 3: Ollama Setup (LLM Engine)
-
-You can run Ollama either locally or on Google Colab (Free T4 GPU):
-
-#### Option A: Running Ollama Locally
-```bash
-# Pull the model (one-time)
-ollama pull llama3.1:8b
-
-# Start Ollama server
-ollama serve
-```
-In the DataSense AI UI, keep the default Ollama Server URL: `http://localhost:11434`.
-
-#### Option B: Running Ollama on Google Colab (GPU Acceleration)
-If you don't have a local GPU, run Ollama on Google Colab with Cloudflare Tunnel:
-1. Open a Colab notebook with a **T4 GPU** runtime.
-2. In a code cell, execute:
-   ```bash
-   !curl -fsSL https://ollama.com/install.sh | sh
-   !ollama serve > ollama.log 2>&1 &
-   !sleep 3
-   !ollama pull llama3.1:8b
-   !wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-   !dpkg -i cloudflared-linux-amd64.deb
-   !cloudflared tunnel --url http://localhost:11434 --logfile tunnel.log > tunnel.log 2>&1 &
-   !sleep 5
-   !grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log | head -n 1
-   ```
-3. Copy the printed Cloudflare URL (e.g. `https://xxxx.trycloudflare.com`).
-4. In the DataSense AI Frontend, paste this URL into the **Ollama Server URL** field.
-
----
-
-### Step 4: Running Automated Tests
-
-To run the unit test suite verifying EDA profiling, JSON parsing, and fallback mechanisms:
-```bash
-.venv/bin/python -m unittest discover -s backend/tests -p "test_*.py"
-```
-Or run the JSON parsing and prompt compaction test specifically:
-```bash
-.venv/bin/python -m unittest backend/tests/test_json_parsing.py
-```
+| Component | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Backend | Python, FastAPI |
+| Data Processing | Pandas, NumPy, SciPy |
+| Machine Learning | Scikit-learn |
+| AI Framework | LangChain, LangGraph |
+| LLM Runtime | Ollama |
+| Model | Llama 3.1 8B |
+| Testing | Pytest |
+| Deployment | Docker, Docker Compose |
 
 ---
 
 ## Project Structure
 
 ```text
-DataSense-AI/
-├── backend/                   # FastAPI Backend
-│   ├── agents/                # AI Agent implementations
-│   │   ├── single_agent.py    # Baseline Single-Agent pipeline (LangChain)
-│   │   └── multi_agent/       # Multi-Agent Specialist pipeline (LangGraph)
-│   │       ├── graph.py       # LangGraph DAG definition
-│   │       ├── nodes.py       # Specialist node handlers
-│   │       └── state.py       # Graph state definitions
-│   ├── core/                  # Deterministic data profiling & EDA
-│   │   ├── eda.py             # Statistical EDA engine
-│   │   ├── profiling.py       # Schema & column profiling
-│   │   └── quality.py         # Data quality scoring
-│   ├── evaluation/            # Controlled experiment & evaluation engine
-│   │   ├── evaluator.py       # Single vs Multi-agent runner
-│   │   ├── metrics.py         # Output completeness & accuracy scorers
-│   │   └── rubric.py          # Ground-truth evaluation rubric
-│   └── main.py                # FastAPI endpoints
-├── datasets/                  # Sample benchmarking CSV datasets
-│   ├── adult_income.csv
-│   ├── california_housing.csv
-│   ├── iris.csv
-│   ├── titanic.csv
-│   └── wine.csv
-├── frontend/                  # React + TypeScript + Vite UI
+smart-dataset-agent/
+│
+├── backend/
+│   ├── core/
+│   │   ├── eda/
+│   │   └── profiler/
+│   ├── tests/
+│   └── main.py
+│
+├── frontend/
 │   ├── src/
-│   │   ├── components/        # Reusable charts, dropzones & layout
-│   │   ├── pages/             # Dashboard, Quality, Exploration, Evaluation
-│   │   └── services/          # API client services
-│   └── package.json
-├── pyproject.toml             # Python dependencies and build config
+│   ├── public/
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── evaluation/
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── requirements.txt
 └── README.md
 ```
+
+---
+
+## Running the Application
+
+### 1. Prerequisites
+
+Install the following:
+
+- Python 3.12
+- Node.js 20 or later
+- Git
+- Ollama (for local LLM functionality)
+- Docker Desktop (for containerized deployment)
+
+### 2. Local Development — React + FastAPI
+
+Run the backend and frontend in separate terminals.
+
+**Terminal 1 — Backend (FastAPI)**
+
+```bash
+# Activate virtual environment on Windows
+.\venv\Scripts\Activate.ps1
+
+# Linux/macOS
+# source venv/bin/activate
+
+# Install backend dependencies
+pip install -r requirements.txt
+
+# Start FastAPI
+uvicorn backend.main:app --reload --port 8000
+```
+
+API documentation:
+
+`http://localhost:8000/docs`
+
+**Terminal 2 — Frontend (React + Vite)**
+
+```bash
+cd frontend
+
+npm install
+npm run dev
+```
+
+Frontend:
+
+`http://localhost:5173`
+
+Vite proxies configured API requests to the local FastAPI backend.
+
+---
+
+## Production Deployment
+
+DataSense AI supports unified deployment, where FastAPI serves both the production-built React application and backend API endpoints.
+
+### 1. Unified Production Deployment
+
+Build the React frontend:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+Start the FastAPI server:
+
+```bash
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+Application:
+
+`http://localhost:8000`
+
+API documentation:
+
+`http://localhost:8000/docs`
+
+### 2. Docker Deployment
+
+The project includes a multi-stage Dockerfile that builds the React frontend and packages it with the Python backend.
+
+Build and start the application:
+
+```bash
+docker compose up --build -d
+```
+
+Access the application:
+
+`http://localhost:8000`
+
+Check running containers:
+
+```bash
+docker compose ps
+```
+
+View logs:
+
+```bash
+docker compose logs -f
+```
+
+Stop the application:
+
+```bash
+docker compose down
+```
+
+### 3. Cloud Deployment
+
+The unified Docker application can be deployed to a container-compatible hosting platform.
+
+**Render deployment:**
+
+1. Push the project to GitHub.
+2. Open [Render](https://render.com/).
+3. Create a new Web Service.
+4. Connect the `smart-dataset-agent` repository.
+5. Select the Docker environment.
+6. Choose the `main` branch.
+7. Configure the service and deploy.
+
+Ensure that the application listens on `0.0.0.0` and the port assigned by the hosting platform.
+
+**Important:** LLM functionality requires an accessible inference service. A local Ollama instance running on a developer's computer is not automatically accessible to a cloud deployment.
+
+---
+
+## Running Tests
+
+Run backend tests:
+
+```bash
+pytest backend/tests/ -v
+```
+
+Run the complete test suite, if configured:
+
+```bash
+pytest -v
+```
+
+---
+
+## Research and Evaluation
+
+DataSense AI explores the differences between centralized Single-Agent and coordinated Multi-Agent architectures for automated dataset understanding.
+
+The experimental framework evaluates both approaches using benchmark datasets and common evaluation metrics.
+
+The central design principle is to separate deterministic statistical computation from LLM-based interpretation, improving reproducibility and making the evidence used by AI agents explicit.
+
+---
+
+## Future Scope
+
+Potential future enhancements include:
+
+- Support for additional dataset formats
+- More advanced data-quality diagnostics
+- Expanded ML model recommendations
+- Improved explainability and agent traceability
+- Additional benchmark datasets
+- Performance and scalability optimization
+- Integration with additional LLM providers
+
+---
+
+## License
+
+This project is distributed under the MIT License. See the `LICENSE` file for details.
+
+---
+
+**DataSense AI — Making datasets easier to understand, analyze, and prepare for machine learning.**
